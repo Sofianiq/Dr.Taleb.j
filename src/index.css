@@ -1,0 +1,467 @@
+@import 'tailwindcss';
+
+/* ============ الألوان والخطوط (مستوحاة من شعار المستشفى) ============ */
+:root {
+  --bg: #f3f7f4;
+  --bg-2: #e8f1eb;
+  --surface: #ffffff;
+  --surface-2: #f6faf7;
+  --surface-3: #eef4f0;
+  --ink: #0d1f17;
+  --ink-2: #2f443a;
+  --muted: #61756b;
+  --line: #e0e9e3;
+  --line-strong: #c9d8ce;
+  --brand: #0d6b42;
+  --brand-2: #14935a;
+  --brand-ink: #0a5535;
+  --brand-soft: #e2f3e9;
+  --on-brand: #ffffff;
+  --accent: #d3262d;
+  --accent-soft: #fdeaea;
+  --coral: #e5765b;
+  --coral-soft: #fdeee9;
+  --warn: #a45a06;
+  --warn-soft: #fff3d6;
+  --info: #22609f;
+  --info-soft: #e5f0fb;
+  --wa: #1ea952;
+  --wa-ink: #ffffff;
+  --chart: #14935a;
+  --chart-track: #e7efe9;
+  --shadow-sm: 0 1px 2px rgb(13 40 28 / 0.06);
+  --shadow: 0 1px 2px rgb(13 40 28 / 0.05), 0 6px 20px -6px rgb(13 40 28 / 0.12);
+  --shadow-lg: 0 10px 40px -10px rgb(13 40 28 / 0.28);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #07110d;
+    --bg-2: #0b1813;
+    --surface: #0e1b16;
+    --surface-2: #12221c;
+    --surface-3: #172a22;
+    --ink: #e5efe9;
+    --ink-2: #c1d2c8;
+    --muted: #8ba197;
+    --line: #1c3027;
+    --line-strong: #274236;
+    --brand: #32b97a;
+    --brand-2: #45cf8d;
+    --brand-ink: #7fe0ae;
+    --brand-soft: #10301f;
+    --on-brand: #04170d;
+    --accent: #f2646a;
+    --accent-soft: #3a1518;
+    --coral: #f08c73;
+    --coral-soft: #36201a;
+    --warn: #f0b04a;
+    --warn-soft: #33260c;
+    --info: #74aee8;
+    --info-soft: #11263a;
+    --wa: #2bc463;
+    --wa-ink: #04170d;
+    --chart: #27a86a;
+    --chart-track: #172a22;
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 8px 24px -8px rgb(0 0 0 / 0.5);
+    --shadow-lg: 0 12px 40px -10px rgb(0 0 0 / 0.7);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #07110d;
+  --bg-2: #0b1813;
+  --surface: #0e1b16;
+  --surface-2: #12221c;
+  --surface-3: #172a22;
+  --ink: #e5efe9;
+  --ink-2: #c1d2c8;
+  --muted: #8ba197;
+  --line: #1c3027;
+  --line-strong: #274236;
+  --brand: #32b97a;
+  --brand-2: #45cf8d;
+  --brand-ink: #7fe0ae;
+  --brand-soft: #10301f;
+  --on-brand: #04170d;
+  --accent: #f2646a;
+  --accent-soft: #3a1518;
+  --coral: #f08c73;
+  --coral-soft: #36201a;
+  --warn: #f0b04a;
+  --warn-soft: #33260c;
+  --info: #74aee8;
+  --info-soft: #11263a;
+  --wa: #2bc463;
+  --wa-ink: #04170d;
+  --chart: #27a86a;
+  --chart-track: #172a22;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 8px 24px -8px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 12px 40px -10px rgb(0 0 0 / 0.7);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: 'IBM Plex Sans Arabic', system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif;
+  --font-display: 'Noto Kufi Arabic Variable', 'IBM Plex Sans Arabic', system-ui, sans-serif;
+
+  --color-bg: var(--bg);
+  --color-bg-2: var(--bg-2);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-brand: var(--brand);
+  --color-brand-2: var(--brand-2);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-soft: var(--brand-soft);
+  --color-on-brand: var(--on-brand);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-coral: var(--coral);
+  --color-coral-soft: var(--coral-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-wa: var(--wa);
+  --color-wa-ink: var(--wa-ink);
+  --color-chart: var(--chart);
+  --color-chart-track: var(--chart-track);
+
+  --shadow-card: var(--shadow);
+  --shadow-soft: var(--shadow-sm);
+  --shadow-float: var(--shadow-lg);
+}
+
+/* ============ أساسيات ============ */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.6;
+    min-height: 100dvh;
+    overscroll-behavior-y: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    line-height: 1.35;
+  }
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+  button {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 2px solid var(--brand-2);
+    outline-offset: 2px;
+  }
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--brand-2) 30%, transparent);
+  }
+}
+
+/* ============ مكوّنات قابلة لإعادة الاستخدام ============ */
+@layer components {
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 1.1rem;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    padding: 0.55rem 1.1rem;
+    border-radius: 0.9rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    line-height: 1.2;
+    border: 1px solid transparent;
+    transition:
+      background-color 0.15s,
+      transform 0.1s,
+      box-shadow 0.15s,
+      opacity 0.15s;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .btn:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+  .btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: var(--brand);
+    color: var(--on-brand);
+    box-shadow: 0 6px 18px -8px color-mix(in oklab, var(--brand) 70%, transparent);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--brand) 88%, black);
+  }
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--ink);
+    border-color: var(--line-strong);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--surface-2);
+  }
+  .btn-soft {
+    background: var(--brand-soft);
+    color: var(--brand-ink);
+  }
+  .btn-soft:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--brand-soft) 85%, var(--brand));
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--ink-2);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--surface-3);
+  }
+  .btn-danger {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--accent-soft) 80%, var(--accent));
+  }
+  .btn-wa {
+    background: var(--wa);
+    color: var(--wa-ink);
+  }
+  .btn-wa:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--wa) 88%, black);
+  }
+  .btn-sm {
+    min-height: 2.25rem;
+    padding: 0.35rem 0.8rem;
+    font-size: 0.85rem;
+    border-radius: 0.75rem;
+  }
+  .btn-icon {
+    min-height: 2.5rem;
+    min-width: 2.5rem;
+    padding: 0;
+    border-radius: 0.8rem;
+  }
+
+  .field-label {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--ink-2);
+    margin-bottom: 0.35rem;
+  }
+  .input {
+    width: 100%;
+    min-height: 2.85rem;
+    padding: 0.6rem 0.85rem;
+    border-radius: 0.85rem;
+    background: var(--surface-2);
+    border: 1px solid var(--line-strong);
+    color: var(--ink);
+    font-size: 1rem;
+    transition:
+      border-color 0.15s,
+      box-shadow 0.15s,
+      background-color 0.15s;
+  }
+  .input::placeholder {
+    color: color-mix(in oklab, var(--muted) 75%, transparent);
+  }
+  .input:focus {
+    outline: none;
+    border-color: var(--brand-2);
+    background: var(--surface);
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--brand-2) 18%, transparent);
+  }
+  textarea.input {
+    min-height: 5.5rem;
+    resize: vertical;
+    line-height: 1.7;
+  }
+  .input-ltr {
+    direction: ltr;
+    text-align: right;
+  }
+  .input-ltr:placeholder-shown {
+    direction: rtl;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.6;
+    white-space: nowrap;
+  }
+
+  .section-title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.02rem;
+    color: var(--ink);
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .pattern-bg {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='0.09' stroke-width='1'%3E%3Cpath d='M28 4 L52 28 L28 52 L4 28 Z'/%3E%3Cpath d='M28 14 L42 28 L28 42 L14 28 Z'/%3E%3Ccircle cx='28' cy='28' r='4'/%3E%3C/g%3E%3C/svg%3E");
+  }
+}
+
+/* ============ حركات ============ */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes pulse-dot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, currentColor 45%, transparent);
+  }
+  60% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+@utility anim-fade-up {
+  animation: fade-up 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@utility anim-fade-in {
+  animation: fade-in 0.2s ease-out both;
+}
+@utility anim-sheet {
+  animation: sheet-up 0.32s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+@utility anim-pop {
+  animation: pop-in 0.22s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+@utility live-dot {
+  animation: pulse-dot 2s infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* ============ الطباعة / PDF ============ */
+#print-root {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  pointer-events: none;
+}
+
+@page {
+  size: A4 portrait;
+  margin: 0;
+}
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    min-height: 0 !important;
+  }
+  body.printing > *:not(#print-root) {
+    display: none !important;
+  }
+  body.printing #print-root {
+    position: static !important;
+    left: auto !important;
+  }
+  body:not(.printing) #print-root {
+    display: none !important;
+  }
+  .pp-page {
+    break-after: page;
+    page-break-after: always;
+  }
+  .pp-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+}

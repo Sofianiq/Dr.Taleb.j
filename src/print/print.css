@@ -1,0 +1,324 @@
+/* تصميم الاستمارات المطبوعة / ملفات PDF — ألوان ثابتة بغض النظر عن الوضع الداكن */
+
+.pp-page {
+  width: 210mm;
+  height: 297mm;
+  padding: 9mm 9mm 7mm;
+  box-sizing: border-box;
+  background: #fff;
+  color: #17222b;
+  font-family: 'IBM Plex Sans Arabic', Tahoma, sans-serif;
+  direction: rtl;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  line-height: 1.45;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.pp-page * {
+  box-sizing: border-box;
+}
+
+/* الترويسة */
+.pp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6mm;
+}
+.pp-brand {
+  display: flex;
+  align-items: center;
+  gap: 3.2mm;
+  min-width: 0;
+}
+.pp-logo {
+  width: 19mm;
+  height: 19mm;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.pp-name-ar {
+  font-family: 'Noto Kufi Arabic Variable', 'IBM Plex Sans Arabic', sans-serif;
+  font-weight: 800;
+  font-size: 13.2pt;
+  color: #a3191f;
+  line-height: 1.35;
+}
+.pp-name-en {
+  font-size: 8pt;
+  font-weight: 600;
+  color: #4d6475;
+  direction: ltr;
+  text-align: right;
+  letter-spacing: 0.02em;
+}
+.pp-title {
+  margin-top: 1mm;
+  font-family: 'Noto Kufi Arabic Variable', 'IBM Plex Sans Arabic', sans-serif;
+  font-weight: 700;
+  font-size: 11pt;
+  color: #1b3a52;
+}
+.pp-meta {
+  flex-shrink: 0;
+  width: 62mm;
+  font-size: 8.6pt;
+}
+.pp-meta-row {
+  display: flex;
+  align-items: baseline;
+  gap: 1.5mm;
+  margin: 0.9mm 0;
+}
+.pp-meta-row b {
+  white-space: nowrap;
+  color: #33495a;
+}
+.pp-meta-row span {
+  flex: 1;
+  min-height: 4.6mm;
+  border-bottom: 0.25mm dotted #8fa3b3;
+  font-weight: 600;
+  color: #000;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pp-divider {
+  height: 0.8mm;
+  margin: 2.6mm 0 2.4mm;
+  border-radius: 1mm;
+  background: linear-gradient(to left, #c4161c, #e5765b 55%, rgba(229, 118, 91, 0.15));
+}
+
+.pp-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2.6mm;
+  font-size: 8.8pt;
+}
+.pp-strip-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.6mm;
+  padding: 0.7mm 3mm;
+  border-radius: 1.6mm;
+  font-weight: 700;
+  background: #e8f3ec;
+  color: #0d6b42;
+}
+.pp-strip-tag.icu {
+  background: #fde9ea;
+  color: #b3161c;
+}
+.pp-strip-count {
+  color: #4d6475;
+  font-weight: 600;
+}
+
+/* شبكة البطاقات */
+.pp-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: repeat(5, minmax(0, 1fr));
+  gap: 3mm 3.2mm;
+  min-height: 0;
+}
+.pp-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 0.3mm solid #bcd0df;
+  border-top: 1mm solid #4f8fc0;
+  border-radius: 2mm;
+  padding: 1.8mm 2.6mm 2mm;
+  font-size: 8.3pt;
+  background: #fff;
+}
+.pp-card.icu {
+  border-top-color: #c4161c;
+  border-color: #e7c4c6;
+}
+.pp-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pp-room {
+  padding: 0.4mm 2.4mm;
+  border-radius: 1.2mm;
+  font-weight: 700;
+  font-size: 8.6pt;
+  background: #e4eef8;
+  color: #1f5f94;
+}
+.pp-card.icu .pp-room {
+  background: #fde9ea;
+  color: #b3161c;
+}
+.pp-num {
+  direction: ltr;
+  font-weight: 700;
+  font-size: 8pt;
+  color: #9db0c0;
+}
+.pp-f {
+  display: flex;
+  align-items: baseline;
+  gap: 1.4mm;
+  margin-top: 0.6mm;
+}
+.pp-f b {
+  white-space: nowrap;
+  color: #2b3e4d;
+  font-weight: 700;
+}
+.pp-f span {
+  flex: 1;
+  min-width: 0;
+  min-height: 4.2mm;
+  border-bottom: 0.25mm dotted #9fb2c1;
+  font-weight: 600;
+  color: #000;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pp-vitals-row {
+  display: flex;
+  align-items: center;
+  gap: 1.6mm;
+  margin-top: 1.1mm;
+}
+.pp-vitals-row > b {
+  font-weight: 700;
+  color: #2b3e4d;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+.pp-vitals {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1mm;
+  direction: ltr;
+}
+.pp-vital {
+  border: 0.25mm solid #c9d7e2;
+  border-radius: 1mm;
+  padding: 0.2mm 0.6mm 0.4mm;
+  text-align: center;
+  background: #f8fbfd;
+}
+.pp-vital i {
+  display: block;
+  font-style: normal;
+  font-size: 6.2pt;
+  font-weight: 600;
+  color: #5d7080;
+  line-height: 1.2;
+}
+.pp-vital u {
+  display: block;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 8.2pt;
+  color: #000;
+  min-height: 3.6mm;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pp-notes {
+  flex: 1;
+  min-height: 0;
+  margin: 1mm 0 0;
+  overflow: hidden;
+  font-weight: 500;
+  font-size: 8pt;
+  line-height: 4.4mm;
+  color: #000;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(4.4mm - 0.25mm),
+    #c6d3dd calc(4.4mm - 0.25mm),
+    #c6d3dd 4.4mm
+  );
+}
+.pp-notes b {
+  font-weight: 700;
+  color: #2b3e4d;
+  margin-inline-end: 1.2mm;
+}
+
+/* التذييل */
+.pp-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 2.6mm;
+  padding-top: 1.6mm;
+  border-top: 0.3mm solid #dfe7ee;
+  font-size: 7.4pt;
+  color: #6a7c8a;
+}
+.pp-foot strong {
+  color: #0d6b42;
+  font-weight: 700;
+}
+
+/* جدول الخفارات */
+.pp-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 7.6pt;
+}
+.pp-table th {
+  background: #0d6b42;
+  color: #fff;
+  font-weight: 700;
+  padding: 1.2mm 1mm;
+  border: 0.25mm solid #0d6b42;
+  line-height: 1.3;
+}
+.pp-table td {
+  border: 0.25mm solid #cfdbe3;
+  padding: 0 1.1mm;
+  height: 7.05mm;
+  line-height: 1.2;
+  text-align: center;
+  color: #000;
+  font-weight: 600;
+  overflow: hidden;
+}
+.pp-table td.pp-day {
+  text-align: right;
+  font-weight: 700;
+  color: #1b3a52;
+  white-space: nowrap;
+}
+.pp-table td.pp-day small {
+  font-weight: 500;
+  color: #6a7c8a;
+  margin-inline-start: 1mm;
+}
+.pp-table tr:nth-child(even) td {
+  background: #f5f9f7;
+}
+.pp-table tr.fri td {
+  background: #fdf1ee;
+}
+.pp-note {
+  margin-top: 2.4mm;
+  font-size: 8pt;
+  color: #33495a;
+}

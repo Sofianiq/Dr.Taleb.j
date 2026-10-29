@@ -1,0 +1,76 @@
+rules_version = '2';
+
+// قواعد أمان قاعدة بيانات مستشفى الدكتور طالب الجنابي الأهلي
+// - المدير (admin@dr.taleb.com): صلاحيات كاملة
+// - الكادر (staff@dr.taleb.com): قراءة كل شيء + تعبئة استمارات المرضى ومعلومات الشفت
+// - أي حساب آخر: لا يملك أي صلاحية
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isAdmin() { return signedIn() && request.auth.token.email == 'admin@dr.taleb.com'; }
+    function isStaff() { return signedIn() && request.auth.token.email == 'staff@dr.taleb.com'; }
+    function isMember() { return isAdmin() || isStaff(); }
+
+    function smallDoc() { return request.resource.data.size() <= 40; }
+    function str(field, max) {
+      return !(field in request.resource.data)
+        || (request.resource.data[field] is string && request.resource.data[field].size() <= max);
+    }
+
+    // إعدادات عامة (عدد الردهات، مسميات الخفارات...)
+    match /settings/{docId} {
+      allow read: if isMember();
+      allow write: if isAdmin();
+    }
+
+    // الردهات: الرقم والاسم وعدد الغرف والأسرّة — المدير فقط
+    match /wards/{wardId} {
+      allow read: if isMember();
+      allow write: if isAdmin();
+    }
+
+    // ترويسة الاستمارة لكل ردهة (التاريخ، الشفت، المقيم الدوري)
+    match /sheets/{wardId} {
+      allow read: if isMember();
+      allow write: if isMember() && smallDoc()
+        && str('date', 20) && str('shift', 40) && str('resident', 120);
+    }
+
+    // الغرف والأسرّة وبيانات المرضى — يملؤها الطبيب المقيم
+    match /slots/{slotId} {
+      allow read: if isMember();
+      allow create, update: if isMember() && smallDoc()
+        && str('patientName', 120) && str('doctorName', 120) && str('operation', 200)
+        && str('bp', 20) && str('pulse', 20) && str('spo2', 20) && str('drain', 40) && str('uop', 40)
+        && str('notes', 2000) && str('roomNo', 20);
+      allow delete: if isAdmin();
+    }
+
+    // سجل المرضى المُخرَجين
+    match /archive/{id} {
+      allow read: if isMember();
+      allow create: if isMember() && smallDoc();
+      allow update, delete: if isAdmin();
+    }
+
+    // دليل الهواتف (أطباء، ممرضين، فنيين...)
+    match /contacts/{id} {
+      allow read: if isMember();
+      allow write: if isAdmin()
+        && (request.resource == null || (str('name', 120) && str('phone', 30) && str('note', 300)));
+    }
+
+    // جدول الخفارات (الكولات) — مستند لكل شهر
+    match /shifts/{monthId} {
+      allow read: if isMember();
+      allow write: if isAdmin();
+    }
+
+    // التعاميم والتبليغات
+    match /announcements/{id} {
+      allow read: if isMember();
+      allow write: if isAdmin();
+    }
+  }
+}
