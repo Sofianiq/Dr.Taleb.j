@@ -112,6 +112,49 @@ export function prettyTime(hhmm: string): string {
   return `${h12}:${pad(m || 0)} ${suffix}`
 }
 
+/** 30/10 — 2:15 م */
+export function shortDateTime(d: Date): string {
+  return `${d.getDate()}/${d.getMonth() + 1} — ${clock(d)}`
+}
+
+/** "45" ← "45 سنة"، أما "3 أيام" فتبقى كما هي */
+export function ageLabel(age: string): string {
+  const a = age.trim()
+  if (!a) return ''
+  return /^[\d٠-٩]+([.,][\d٠-٩]+)?$/.test(a) ? `${a} سنة` : a
+}
+
+/** رقم يوم الرقود: يوم الدخول هو اليوم الأول */
+export function stayDay(admitted: Date | null | undefined, now = new Date()): number {
+  if (!admitted) return 0
+  const a = new Date(admitted.getFullYear(), admitted.getMonth(), admitted.getDate())
+  const b = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return Math.max(1, Math.round((b.getTime() - a.getTime()) / 86_400_000) + 1)
+}
+
+/** مدة الرقود مقروءة: يوم واحد، يومان، 3 أيام، 11 يوماً */
+export function stayLength(days: number): string {
+  if (days <= 1) return 'يوم واحد'
+  if (days === 2) return 'يومان'
+  if (days <= 10) return `${days} أيام`
+  return `${days} يوماً`
+}
+
+/** قيمة حقل datetime-local من تاريخ */
+export function toLocalInput(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+export function fromLocalInput(v: string): Date | null {
+  const d = new Date(v)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+/** هل التاريخ ضمن اليوم الحالي؟ */
+export function isToday(d: Date | null | undefined, now = new Date()): boolean {
+  return !!d && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+}
+
 /**
  * يوم الخفارة الحالي: الخفارة ٢٤ ساعة تبدأ عند shiftStart، فقبل موعد البدء
  * نكون ما زلنا ضمن خفارة اليوم السابق.

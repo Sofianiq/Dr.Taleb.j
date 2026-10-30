@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react'
-import { Building2, LogIn, Mail, Stethoscope } from 'lucide-react'
 import { PasswordInput } from '../components/AccountSheet'
-import { Field, Logo, Segmented, Spinner } from '../components/ui'
+import { Field, Spinner } from '../components/ui'
 import { login } from '../lib/auth'
-import { ACCOUNTS, HOSPITAL_AR, HOSPITAL_EN, MANAGED_BY } from '../lib/constants'
+import { ACCOUNTS, MANAGED_BY } from '../lib/constants'
 import type { Role } from '../data/types'
+import { BrandPanel } from './Intro'
 
 export function Login() {
   const [role, setRole] = useState<Role>('staff')
@@ -32,54 +32,54 @@ export function Login() {
   }
 
   return (
-    <div className="relative min-h-dvh bg-bg">
-      <div className="absolute inset-x-0 top-0 -z-0 h-[19rem] overflow-hidden rounded-b-[2.5rem] bg-[#0b6a40]">
-        <div className="absolute inset-0 bg-[radial-gradient(100%_90%_at_85%_0%,#18a564_0%,#0b6a40_45%,#06432a_100%)]" />
-        <div className="pattern-bg absolute inset-0 opacity-80" />
-        <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-l from-transparent via-[#ff6b70] to-transparent opacity-70" />
+    <div className="min-h-dvh bg-surface lg:grid lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+      <div className="lg:hidden">
+        <BrandPanel compact />
+      </div>
+      <div className="hidden lg:block">
+        <BrandPanel />
       </div>
 
-      <div className="relative mx-auto flex min-h-dvh max-w-md flex-col px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))]">
-        <div className="anim-fade-up flex flex-col items-center text-center text-white">
-          <Logo size={92} className="shadow-[0_14px_36px_-10px_rgba(0,0,0,0.55)] ring-4 ring-white/80" />
-          <h1 className="mt-4 font-display text-[1.35rem] font-extrabold">{HOSPITAL_AR}</h1>
-          <div className="text-[0.76rem] text-white/70" dir="ltr">
-            {HOSPITAL_EN}
-          </div>
-        </div>
-
-        <form
-          onSubmit={submit}
-          className="anim-fade-up card mt-7 space-y-4 p-5 shadow-float sm:p-6"
-          style={{ animationDelay: '90ms' }}
-        >
+      <section className="flex flex-col justify-center px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-8 lg:px-16">
+        <form onSubmit={submit} className="w-full max-w-sm space-y-5">
           <div>
-            <h2 className="text-[1.2rem] font-bold">تسجيل الدخول</h2>
-            <p className="text-[0.86rem] text-muted">اختر نوع الحساب ثم أدخل كلمة المرور</p>
+            <h1 className="text-[1.4rem] font-bold text-ink">تسجيل الدخول</h1>
+            <p className="mt-1 text-[0.88rem] text-muted">اختر نوع الحساب ثم أدخل كلمة المرور.</p>
           </div>
 
-          <Segmented<Role>
-            value={role}
-            onChange={pickRole}
-            options={[
-              { value: 'staff', label: <><Stethoscope size={17} /> الكادر الطبي</> },
-              { value: 'admin', label: <><Building2 size={17} /> الإدارة</> },
-            ]}
-          />
+          <fieldset>
+            <legend className="field-label">نوع الحساب</legend>
+            <div className="grid grid-cols-2 gap-2">
+              {(['staff', 'admin'] as Role[]).map((r) => {
+                const active = role === r
+                return (
+                  <label
+                    key={r}
+                    className={`flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-colors ${
+                      active ? 'border-brand bg-brand-soft' : 'border-line-strong hover:border-faint'
+                    }`}
+                  >
+                    <input type="radio" name="role" className="mt-1 accent-[var(--brand)]" checked={active} onChange={() => pickRole(r)} />
+                    <span>
+                      <span className="block text-[0.9rem] font-bold text-ink">{ACCOUNTS[r].label}</span>
+                      <span className="block text-[0.74rem] text-muted">{ACCOUNTS[r].description}</span>
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          </fieldset>
 
           <Field label="البريد الإلكتروني">
-            <div className="relative">
-              <input
-                className="input input-ltr pe-11"
-                type="email"
-                inputMode="email"
-                autoComplete="username"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-              <Mail size={18} className="pointer-events-none absolute inset-y-0 end-3.5 my-auto text-muted" />
-            </div>
+            <input
+              className="input ltr-input"
+              type="email"
+              inputMode="email"
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
           </Field>
 
           <Field label="كلمة المرور">
@@ -87,19 +87,19 @@ export function Login() {
           </Field>
 
           {error && (
-            <div role="alert" className="rounded-xl bg-accent-soft px-3.5 py-2.5 text-[0.88rem] font-medium leading-relaxed text-accent">
+            <div role="alert" className="rounded-md border border-critical/25 bg-critical-soft px-3 py-2 text-[0.86rem] leading-relaxed text-critical">
               {error}
             </div>
           )}
 
-          <button type="submit" className="btn btn-primary h-12 w-full text-[1.02rem]" disabled={busy}>
-            {busy ? <Spinner size={19} /> : <LogIn size={19} className="-scale-x-100" />}
+          <button type="submit" className="btn btn-primary btn-lg w-full" disabled={busy}>
+            {busy && <Spinner size={17} />}
             دخول
           </button>
-        </form>
 
-        <div className="mt-auto pt-8 text-center text-[0.84rem] font-semibold text-muted">{MANAGED_BY}</div>
-      </div>
+          <p className="pt-2 text-[0.82rem] text-muted lg:hidden">{MANAGED_BY}</p>
+        </form>
+      </section>
     </div>
   )
 }

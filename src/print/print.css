@@ -112,10 +112,6 @@
   background: #e8f3ec;
   color: #0d6b42;
 }
-.pp-strip-tag.icu {
-  background: #fde9ea;
-  color: #b3161c;
-}
 .pp-strip-count {
   color: #4d6475;
   font-weight: 600;
@@ -141,10 +137,6 @@
   font-size: 8.3pt;
   background: #fff;
 }
-.pp-card.icu {
-  border-top-color: #c4161c;
-  border-color: #e7c4c6;
-}
 .pp-card-head {
   display: flex;
   align-items: center;
@@ -158,15 +150,17 @@
   background: #e4eef8;
   color: #1f5f94;
 }
-.pp-card.icu .pp-room {
-  background: #fde9ea;
-  color: #b3161c;
+.pp-card.crit {
+  border-top-color: #c4161c;
 }
 .pp-num {
-  direction: ltr;
+  unicode-bidi: plaintext;
   font-weight: 700;
-  font-size: 8pt;
-  color: #9db0c0;
+  font-size: 7.6pt;
+  color: #8ea2b2;
+}
+.pp-card.crit .pp-num {
+  color: #c4161c;
 }
 .pp-f {
   display: flex;
@@ -189,6 +183,12 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.pp-f .pp-f-side {
+  margin-inline-start: 1mm;
+}
+.pp-f .pp-f-short {
+  flex: 0 0 17mm;
 }
 .pp-vitals-row {
   display: flex;
@@ -320,5 +320,244 @@
 .pp-note {
   margin-top: 2.4mm;
   font-size: 8pt;
+  color: #33495a;
+}
+
+.crit-text {
+  color: #c4161c !important;
+}
+.pp-empty {
+  margin-top: 6mm;
+  text-align: center;
+  font-size: 9pt;
+  color: #6a7c8a;
+}
+
+/* تقرير تسليم الشفت */
+.pp-summary {
+  display: flex;
+  gap: 6mm;
+  margin-bottom: 2.6mm;
+  padding: 1.6mm 3mm;
+  border: 0.3mm solid #dfe7ee;
+  border-radius: 1.4mm;
+  background: #f7faf8;
+  font-size: 8.6pt;
+  color: #33495a;
+}
+.pp-summary b {
+  color: #000;
+  font-weight: 700;
+}
+.pp-ho {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 7.8pt;
+}
+.pp-ho th {
+  background: #0d6b42;
+  color: #fff;
+  font-weight: 700;
+  padding: 1.2mm 1.4mm;
+  text-align: right;
+  border: 0.25mm solid #0d6b42;
+}
+.pp-ho td {
+  border: 0.25mm solid #d3dde4;
+  padding: 0.8mm 1.4mm;
+  height: 13.2mm;
+  vertical-align: top;
+  overflow: hidden;
+  color: #000;
+}
+.pp-ho tr.crit td {
+  background: #fdf1f1;
+}
+.pp-ho tr.crit .pp-ho-status {
+  color: #c4161c;
+}
+.pp-ho-ward td {
+  height: 8mm !important;
+  vertical-align: middle !important;
+  background: #eef3f0;
+  font-weight: 700;
+  font-size: 8.6pt;
+  color: #0d6b42;
+}
+.pp-ho-ward small {
+  font-weight: 500;
+  color: #4d6475;
+}
+.pp-ho-bed {
+  text-align: center;
+  font-weight: 700;
+  font-size: 9.5pt;
+}
+.pp-ho-c {
+  text-align: center;
+  white-space: nowrap;
+}
+.pp-ho-name {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pp-ho-sub {
+  color: #4d6475;
+  font-size: 7.2pt;
+}
+.pp-ho-clip {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pp-ho-vitals {
+  direction: ltr;
+  text-align: left;
+  font-size: 7.2pt;
+  line-height: 1.35;
+}
+.pp-ho-vitals span {
+  margin-right: 1.6mm;
+  white-space: nowrap;
+  color: #4d6475;
+}
+.pp-ho-vitals b {
+  color: #000;
+}
+.pp-ho-vitals em {
+  display: block;
+  font-style: normal;
+  color: #8ea2b2;
+  font-size: 6.6pt;
+  direction: rtl;
+  text-align: right;
+}
+.pp-ho-status {
+  font-weight: 700;
+  font-size: 7.4pt;
+  color: #0d6b42;
+}
+.pp-ho-notes {
+  font-size: 7.2pt;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ملخص المريض */
+.pp-info {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  border: 0.3mm solid #d3dde4;
+  border-radius: 1.6mm;
+  overflow: hidden;
+  font-size: 8.6pt;
+}
+.pp-info > div {
+  padding: 1.8mm 2.6mm;
+  border-bottom: 0.25mm solid #e3eaef;
+  border-left: 0.25mm solid #e3eaef;
+  min-width: 0;
+}
+.pp-info > div:nth-child(3n) {
+  border-left: none;
+}
+.pp-info > div:nth-last-child(-n + 3) {
+  border-bottom: none;
+}
+.pp-info b {
+  display: block;
+  font-size: 7.2pt;
+  font-weight: 600;
+  color: #5d7080;
+}
+.pp-info span {
+  display: block;
+  font-weight: 700;
+  color: #000;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pp-box {
+  margin-top: 3mm;
+  padding: 2mm 2.6mm;
+  border: 0.3mm solid #d3dde4;
+  border-radius: 1.6mm;
+  font-size: 8.6pt;
+}
+.pp-box b {
+  font-size: 7.6pt;
+  color: #5d7080;
+}
+.pp-box p {
+  margin: 0.6mm 0 0;
+  white-space: pre-line;
+  max-height: 26mm;
+  overflow: hidden;
+  color: #000;
+}
+.pp-subtitle {
+  margin: 4mm 0 1.6mm;
+  font-weight: 700;
+  font-size: 9.4pt;
+  color: #1b3a52;
+}
+.pp-obs {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 8pt;
+}
+.pp-obs th {
+  background: #f1f5f3;
+  color: #33495a;
+  font-weight: 700;
+  padding: 1.2mm 1mm;
+  border: 0.25mm solid #d3dde4;
+  text-align: center;
+}
+.pp-obs th small {
+  display: block;
+  font-weight: 500;
+  font-size: 6.4pt;
+  color: #8ea2b2;
+}
+.pp-obs td {
+  border: 0.25mm solid #e1e8ed;
+  padding: 0 1mm;
+  height: 6.2mm;
+  text-align: center;
+  font-weight: 600;
+  color: #000;
+}
+.pp-obs .pp-obs-time {
+  white-space: nowrap;
+  font-weight: 500;
+  color: #33495a;
+}
+.pp-obs .pp-obs-by {
+  font-weight: 500;
+  font-size: 7pt;
+  color: #5d7080;
+  max-width: 34mm;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pp-empty-cell {
+  color: #8ea2b2 !important;
+  font-weight: 500 !important;
+  height: 10mm !important;
+}
+.pp-sign {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4mm;
+  font-size: 8.4pt;
   color: #33495a;
 }

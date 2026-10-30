@@ -1,29 +1,20 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import {
-  AlertTriangle,
-  Building2,
-  CalendarClock,
-  CloudOff,
-  Info,
-  RefreshCw,
-  Stethoscope,
-  UserRound,
-  Users,
-} from 'lucide-react'
+import { AlertTriangle, Building2, CalendarClock, CloudOff, Info, RefreshCw, Stethoscope, Users } from 'lucide-react'
 import { useAuth } from '../data/auth'
 import { useData } from '../data/store'
-import { HOSPITAL_SHORT, MANAGED_BY } from '../lib/constants'
+import { HOSPITAL_SHORT, MANAGED_BY, ROLE_LABEL } from '../lib/constants'
+import { markOperatorPrompted, operatorPrompted, setOperatorName, useOperatorName } from '../lib/operator'
 import { usePwa } from '../lib/pwa'
-import { Logo } from './ui'
+import { Field, Logo, Sheet } from './ui'
 import { AccountSheet } from './AccountSheet'
 
-const NAV: { to: string; label: string; icon: ReactNode }[] = [
-  { to: '/resident', label: 'الطبيب المقيم', icon: <Stethoscope size={22} /> },
-  { to: '/staff', label: 'الكادر الطبي', icon: <Users size={22} /> },
-  { to: '/inquiries', label: 'الاستعلامات', icon: <Info size={22} /> },
-  { to: '/shifts', label: 'الكولات', icon: <CalendarClock size={22} /> },
-  { to: '/admin', label: 'الإدارة', icon: <Building2 size={22} /> },
+const NAV: { to: string; label: string; icon: (s: number) => ReactNode }[] = [
+  { to: '/resident', label: 'الطبيب المقيم', icon: (s) => <Stethoscope size={s} strokeWidth={1.8} /> },
+  { to: '/staff', label: 'الكادر الطبي', icon: (s) => <Users size={s} strokeWidth={1.8} /> },
+  { to: '/inquiries', label: 'الاستعلامات', icon: (s) => <Info size={s} strokeWidth={1.8} /> },
+  { to: '/shifts', label: 'الكولات', icon: (s) => <CalendarClock size={s} strokeWidth={1.8} /> },
+  { to: '/admin', label: 'الإدارة', icon: (s) => <Building2 size={s} strokeWidth={1.8} /> },
 ]
 
 function useOnline() {
@@ -48,41 +39,71 @@ function useSyncState() {
   // إذا تعذّر الوصول إلى الخادم لأكثر من بضع ثوانٍ نعرض "غير متصل" بدلاً من "جارٍ الاتصال"
   const [stalled, setStalled] = useState(false)
   useEffect(() => {
-    if (live) return setStalled(false)
+    if (live) {
+      setStalled(false)
+      return
+    }
     const t = window.setTimeout(() => setStalled(true), 7000)
     return () => window.clearTimeout(t)
   }, [live])
   const online = browserOnline && !stalled
-  const label = !online ? 'غير متصل' : status.pendingWrites ? 'جارٍ الحفظ' : live ? 'مباشر' : 'جارٍ الاتصال'
+  const label = !online ? 'غير متصل' : status.pendingWrites ? 'جارٍ الحفظ' : live ? 'متصل — تحديث لحظي' : 'جارٍ الاتصال'
   return { online, live, label }
 }
 
-function SyncBadge() {
+function SyncIndicator({ compact = false }: { compact?: boolean }) {
   const { online, live, label } = useSyncState()
-  const tone = !online ? 'bg-warn-soft text-warn' : live ? 'bg-brand-soft text-brand-ink' : 'bg-surface-3 text-muted'
   return (
-    // على الهاتف تظهر حالة "مباشر" كنقطة خضراء على زر الحساب لتوفير المساحة
-    <span
-      className={`chip shrink-0 gap-1.5 ${tone} ${live ? 'max-sm:hidden' : ''}`}
-      title={live ? 'التحديثات تظهر لحظياً لجميع المستخدمين' : label}
-      role="status"
-    >
-      {!online ? (
-        <CloudOff size={13} />
+    <span role="status" title={label} className={`inline-flex items-center gap-1.5 text-[0.76rem] font-medium ${online ? 'text-muted' : 'text-warn'}`}>
+      {online ? (
+        <span className={`size-2 rounded-full ${live ? 'live-dot bg-brand text-brand' : 'bg-faint'}`} />
       ) : (
-        <span className={`size-2 rounded-full ${live ? 'live-dot bg-brand-2 text-brand-2' : 'bg-muted'}`} />
+        <CloudOff size={14} />
       )}
-      {label}
+      <span className={compact && live ? 'sr-only' : ''}>{compact && live ? label : online ? (live ? 'متصل' : label) : label}</span>
     </span>
   )
 }
 
-export function AppShell() {
+function initials(name: string) {
+  const parts = name.replace(/^(د\.|د |دكتور|الدكتور)\s*/, '').trim().split(/\s+/)
+  return (parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')
+}
+
+function AccountButton({ onClick, wide = false }: { onClick: () => void; wide?: boolean }) {
   const { role } = useAuth()
+  const name = useOperatorName()
+  if (wide) {
+    return (
+      <button type="button" onClick={onClick} className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-start hover:bg-surface-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-surface-3 text-[0.82rem] font-bold text-ink-2 ring-1 ring-line">
+          {name ? initials(name) : <Users size={16} />}
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-[0.86rem] font-semibold text-ink">{name || 'مستخدم الجهاز'}</span>
+          <span className="block truncate text-[0.74rem] text-muted">{role ? ROLE_LABEL[role] : ''}</span>
+        </span>
+      </button>
+    )
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="grid size-9 shrink-0 place-items-center rounded-full bg-surface-3 text-[0.8rem] font-bold text-ink-2 ring-1 ring-line"
+      aria-label="الحساب والإعدادات"
+    >
+      {name ? initials(name) : <Users size={16} />}
+    </button>
+  )
+}
+
+export function AppShell() {
   const { status } = useData()
+  const { role } = useAuth()
   const pwa = usePwa()
-  const sync = useSyncState()
   const [accountOpen, setAccountOpen] = useState(false)
+  const [askName, setAskName] = useState(() => !operatorPrompted())
   const location = useLocation()
 
   useEffect(() => {
@@ -90,82 +111,99 @@ export function AppShell() {
   }, [location.pathname])
 
   return (
-    <div className="min-h-dvh pb-[calc(5.4rem+env(safe-area-inset-bottom))]">
-      <header className="sticky top-0 z-30 border-b border-line bg-surface/85 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-5xl items-center gap-2.5 px-4">
-          <Logo size={42} className="ring-1 ring-line" />
-          <div className="min-w-0 flex-1 leading-tight">
-            <div className="truncate font-display text-[0.95rem] font-bold text-ink">{HOSPITAL_SHORT}</div>
-            <div className="truncate text-[0.74rem] font-medium text-muted">{MANAGED_BY}</div>
-          </div>
-          <SyncBadge />
-          <button
-            type="button"
-            onClick={() => setAccountOpen(true)}
-            className="relative grid size-10 shrink-0 place-items-center rounded-full border border-line bg-surface-2 text-brand-ink transition hover:bg-brand-soft"
-            aria-label={`الحساب والإعدادات — ${sync.label}`}
-          >
-            <UserRound size={20} />
-            {sync.live && (
-              <span className="live-dot absolute -end-0.5 -top-0.5 size-3 rounded-full border-2 border-surface bg-brand-2 text-brand-2 sm:hidden" />
-            )}
-          </button>
-        </div>
-        <div className="h-[3px] bg-gradient-to-l from-brand via-brand-2 to-accent opacity-90" />
-      </header>
-
-      {status.error && (
-        <div className="mx-auto mt-3 max-w-5xl px-4">
-          <div className="flex items-start gap-2.5 rounded-2xl border border-warn/30 bg-warn-soft px-4 py-3 text-[0.86rem] text-warn">
-            <AlertTriangle size={18} className="mt-0.5 shrink-0" />
-            <span>{status.error}</span>
+    <div className="min-h-dvh lg:flex">
+      {/* الشريط الجانبي (الحاسوب) */}
+      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-e border-line bg-surface lg:flex">
+        <div className="flex items-center gap-3 border-b border-line px-4 py-4">
+          <Logo size={40} className="ring-1 ring-line" />
+          <div className="min-w-0 leading-snug">
+            <div className="text-[0.9rem] font-bold text-ink">{HOSPITAL_SHORT}</div>
+            <div className="text-[0.74rem] text-muted">{MANAGED_BY}</div>
           </div>
         </div>
-      )}
-
-      {pwa.needRefresh && (
-        <div className="mx-auto mt-3 max-w-5xl px-4">
-          <div className="flex items-center gap-3 rounded-2xl border border-info/25 bg-info-soft px-4 py-2.5 text-[0.88rem] text-info">
-            <RefreshCw size={18} className="shrink-0" />
-            <span className="flex-1 font-semibold">يتوفر إصدار جديد من التطبيق</span>
-            <button type="button" className="btn btn-sm bg-info text-white" onClick={pwa.applyUpdate}>
-              تحديث
-            </button>
-          </div>
-        </div>
-      )}
-
-      <main className="mx-auto max-w-5xl px-4 pt-4">
-        <Outlet />
-      </main>
-
-      <nav
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/92 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl"
-        aria-label="التبويبات الرئيسية"
-      >
-        <div className="mx-auto grid h-[4.6rem] max-w-xl grid-cols-5 px-1">
+        <nav className="flex-1 space-y-0.5 p-3" aria-label="الأقسام">
           {NAV.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
-                `group flex flex-col items-center justify-center gap-1 rounded-2xl text-center transition ${
-                  isActive ? 'text-brand-ink' : 'text-muted hover:text-ink'
+                `relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-[0.9rem] font-semibold transition-colors ${
+                  isActive ? 'bg-brand-soft text-brand-ink' : 'text-ink-2 hover:bg-surface-3'
                 }`
+              }
+            >
+              {item.icon(19)}
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
+        <div className="space-y-2 border-t border-line p-3">
+          <div className="px-2.5">
+            <SyncIndicator />
+          </div>
+          <AccountButton wide onClick={() => setAccountOpen(true)} />
+        </div>
+      </aside>
+
+      <div className="min-w-0 flex-1 pb-[calc(4.4rem+env(safe-area-inset-bottom))] lg:pb-10">
+        {/* الشريط العلوي (الهاتف) */}
+        <header className="sticky top-0 z-30 border-b border-line bg-surface pt-[env(safe-area-inset-top)] lg:hidden">
+          <div className="flex h-14 items-center gap-2.5 px-4">
+            <Logo size={32} className="ring-1 ring-line" />
+            <div className="min-w-0 flex-1 leading-tight">
+              <div className="truncate text-[0.9rem] font-bold text-ink">{HOSPITAL_SHORT}</div>
+              <div className="truncate text-[0.7rem] text-muted">{MANAGED_BY}</div>
+            </div>
+            <SyncIndicator compact />
+            <AccountButton onClick={() => setAccountOpen(true)} />
+          </div>
+        </header>
+
+        {status.error && (
+          <div className="mx-auto mt-4 max-w-6xl px-4 lg:px-8">
+            <div className="flex items-start gap-2.5 rounded-lg border border-warn/30 bg-warn-soft px-3.5 py-2.5 text-[0.86rem] text-warn">
+              <AlertTriangle size={17} className="mt-0.5 shrink-0" />
+              <span>{status.error}</span>
+            </div>
+          </div>
+        )}
+
+        {pwa.needRefresh && (
+          <div className="mx-auto mt-4 max-w-6xl px-4 lg:px-8">
+            <div className="flex items-center gap-3 rounded-lg border border-info/25 bg-info-soft px-3.5 py-2 text-[0.86rem] text-info">
+              <RefreshCw size={16} className="shrink-0" />
+              <span className="flex-1 font-semibold">يتوفر إصدار جديد من التطبيق</span>
+              <button type="button" className="btn btn-sm bg-info text-white" onClick={pwa.applyUpdate}>
+                تحديث الآن
+              </button>
+            </div>
+          </div>
+        )}
+
+        <main className="mx-auto max-w-6xl px-4 pt-5 lg:px-8 lg:pt-8">
+          <Outlet />
+        </main>
+      </div>
+
+      {/* الشريط السفلي (الهاتف) */}
+      <nav
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden"
+        aria-label="التبويبات الرئيسية"
+      >
+        <div className="grid h-[4.1rem] grid-cols-5">
+          {NAV.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                `relative flex flex-col items-center justify-center gap-1 text-center ${isActive ? 'text-brand-ink' : 'text-muted'}`
               }
             >
               {({ isActive }) => (
                 <>
-                  <span
-                    className={`grid h-8 w-14 place-items-center rounded-full transition ${
-                      isActive ? 'bg-brand-soft' : 'group-hover:bg-surface-3'
-                    }`}
-                  >
-                    {item.icon}
-                  </span>
-                  <span className={`text-[0.7rem] leading-none ${isActive ? 'font-bold' : 'font-medium'}`}>
-                    {item.label}
-                  </span>
+                  {isActive && <span className="absolute inset-x-4 top-0 h-[2px] rounded-b bg-brand" />}
+                  {item.icon(21)}
+                  <span className={`text-[0.68rem] leading-none ${isActive ? 'font-bold' : 'font-medium'}`}>{item.label}</span>
                 </>
               )}
             </NavLink>
@@ -174,6 +212,41 @@ export function AppShell() {
       </nav>
 
       <AccountSheet open={accountOpen} onClose={() => setAccountOpen(false)} role={role} />
+      <OperatorPrompt
+        open={askName}
+        onClose={() => {
+          markOperatorPrompted()
+          setAskName(false)
+        }}
+      />
     </div>
+  )
+}
+
+/** يُسأل المستخدم مرة واحدة على كل جهاز عن اسمه ليُسجَّل مع تعديلاته */
+function OperatorPrompt({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const current = useOperatorName()
+  const [name, setName] = useState(current)
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    setOperatorName(name)
+    onClose()
+  }
+  return (
+    <Sheet open={open} onClose={onClose} size="sm" title="من يستخدم هذا الجهاز؟" subtitle="يظهر الاسم بجانب كل تعديل في سجل النشاطات">
+      <form onSubmit={submit} className="space-y-4">
+        <Field label="الاسم" hint="يمكن تغييره لاحقاً من قائمة الحساب">
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="مثال: د. حسن علي" autoFocus />
+        </Field>
+        <div className="flex flex-row-reverse gap-2">
+          <button type="submit" className="btn btn-primary" disabled={!name.trim()}>
+            حفظ
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            لاحقاً
+          </button>
+        </div>
+      </form>
+    </Sheet>
   )
 }

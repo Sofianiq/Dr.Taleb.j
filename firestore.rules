@@ -1,8 +1,8 @@
 rules_version = '2';
 
 // قواعد أمان قاعدة بيانات مستشفى الدكتور طالب الجنابي الأهلي
-// - المدير (admin@dr.taleb.com): صلاحيات كاملة
-// - الكادر (staff@dr.taleb.com): قراءة كل شيء + تعبئة استمارات المرضى ومعلومات الشفت
+// - الإدارة (admin@dr.taleb.com): صلاحيات كاملة، وهي وحدها تعدّل الردهات والأقسام والإعدادات
+// - الكادر (staff@dr.taleb.com): قراءة كل شيء + إدخال المرضى ومتابعتهم ونقلهم وإخراجهم
 // - أي حساب آخر: لا يملك أي صلاحية
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -12,49 +12,78 @@ service cloud.firestore {
     function isStaff() { return signedIn() && request.auth.token.email == 'staff@dr.taleb.com'; }
     function isMember() { return isAdmin() || isStaff(); }
 
-    function smallDoc() { return request.resource.data.size() <= 40; }
+    function data() { return request.resource.data; }
+    function smallDoc() { return data().size() <= 40; }
     function str(field, max) {
-      return !(field in request.resource.data)
-        || (request.resource.data[field] is string && request.resource.data[field].size() <= max);
+      return !(field in data()) || (data()[field] is string && data()[field].size() <= max);
+    }
+    function mapField(field, maxKeys) {
+      return !(field in data()) || (data()[field] is map && data()[field].size() <= maxKeys);
     }
 
-    // إعدادات عامة (عدد الردهات، مسميات الخفارات...)
+    // إعدادات عامة: مناصب الخفارة، الأقسام، وقت بدء الخفارة
     match /settings/{docId} {
       allow read: if isMember();
       allow write: if isAdmin();
     }
 
-    // الردهات: الرقم والاسم وعدد الغرف والأسرّة — المدير فقط
+    // الردهات: الاسم وعدد الأسرّة ونوع الوحدة والعلامات الحيوية — الإدارة فقط
     match /wards/{wardId} {
       allow read: if isMember();
       allow write: if isAdmin();
     }
 
-    // ترويسة الاستمارة لكل ردهة (التاريخ، الشفت، المقيم الدوري)
+    // ترويسة استمارة كل ردهة (التاريخ، الشفت، المقيم الدوري)
     match /sheets/{wardId} {
       allow read: if isMember();
       allow write: if isMember() && smallDoc()
         && str('date', 20) && str('shift', 40) && str('resident', 120);
     }
 
-    // الغرف والأسرّة وبيانات المرضى — يملؤها الطبيب المقيم
-    match /slots/{slotId} {
+    // الأسرّة وبيانات المرضى
+    function validBed() {
+      return smallDoc()
+        && str('patientName', 120) && str('age', 20) && str('sex', 10) && str('doctorName', 120)
+        && str('procedure', 200) && str('familyPhone', 30) && str('notes', 3000) && str('label', 20)
+        && str('admissionId', 40) && str('updatedBy', 120) && str('vitalsBy', 120)
+        && (!('status' in data()) || data().status in ['occupied', 'critical', 'discharge', 'empty', 'reserved', 'cleaning'])
+        && mapField('vitals', 12);
+    }
+    // تغيير رقم السرير المعروض للإدارة فقط
+    function labelUnchanged() {
+      return !('label' in data())
+        || (resource == null && data().label == '')
+        || (resource != null && 'label' in resource.data && data().label == resource.data.label)
+        || (resource != null && !('label' in resource.data) && data().label == '');
+    }
+    match /beds/{bedId} {
       allow read: if isMember();
-      allow create, update: if isMember() && smallDoc()
-        && str('patientName', 120) && str('doctorName', 120) && str('operation', 200)
-        && str('bp', 20) && str('pulse', 20) && str('spo2', 20) && str('drain', 40) && str('uop', 40)
-        && str('notes', 2000) && str('roomNo', 20);
+      allow create, update: if isMember() && validBed() && (isAdmin() || labelUnchanged());
       allow delete: if isAdmin();
+    }
+
+    // سجل العلامات الحيوية لكل رقود
+    match /observations/{id} {
+      allow read: if isMember();
+      allow create: if isMember() && smallDoc() && mapField('values', 12) && str('by', 120);
+      allow update, delete: if isAdmin();
+    }
+
+    // سجل النشاطات
+    match /activity/{id} {
+      allow read: if isMember();
+      allow create: if isMember() && smallDoc() && str('text', 300) && str('by', 120);
+      allow update, delete: if isAdmin();
     }
 
     // سجل المرضى المُخرَجين
     match /archive/{id} {
       allow read: if isMember();
-      allow create: if isMember() && smallDoc();
+      allow create: if isMember() && smallDoc() && str('dischargeNote', 1000);
       allow update, delete: if isAdmin();
     }
 
-    // دليل الهواتف (أطباء، ممرضين، فنيين...)
+    // دليل الهواتف
     match /contacts/{id} {
       allow read: if isMember();
       allow write: if isAdmin()

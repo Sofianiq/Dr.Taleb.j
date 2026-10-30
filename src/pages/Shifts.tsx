@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { CalendarClock, ChevronLeft, ChevronRight, Copy, FileDown, NotebookPen, Pencil, Printer } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Copy, FileDown, NotebookPen, Printer } from 'lucide-react'
 import { WhatsAppIcon } from '../components/Contacts'
-import { Field, PageHeader, Sheet, Spinner, useConfirm, useToast } from '../components/ui'
+import { Field, PageHeader, SectionHeader, Sheet, Spinner, useConfirm, useToast } from '../components/ui'
 import { copyShiftMonth, setShiftDay, setShiftNote } from '../data/actions'
 import { useAuth } from '../data/auth'
 import { useData, useShiftMonth } from '../data/store'
@@ -22,18 +22,22 @@ export function ShiftsPage() {
   const printer = usePrint()
   const toast = useToast()
   const confirm = useConfirm()
-  const todayRef = useRef<HTMLDivElement>(null)
+  const todayRow = useRef<HTMLElement | null>(null)
+  const todayItem = useRef<HTMLElement | null>(null)
   const isCurrent = month === today.monthId
   const days = daysInMonth(month)
   const positions = settings.positions
+  const dayList = Array.from({ length: days }, (_, i) => i + 1)
 
   useEffect(() => {
-    if (isCurrent && !loading) todayRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    if (!isCurrent || loading) return
+    // الجدول للحاسوب والقائمة للهاتف: نمرّر إلى العنصر الظاهر منهما
+    const el = [todayRow.current, todayItem.current].find((e) => e && e.offsetParent !== null)
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [isCurrent, loading])
 
   const filled = data?.days ? Object.values(data.days).filter((d) => Object.values(d ?? {}).some(Boolean)).length : 0
-
-  const printDoc = <ShiftDoc month={month} data={data} positions={positions} shiftStart={settings.shiftStart} />
+  const printDoc = () => <ShiftDoc month={month} data={data} positions={positions} shiftStart={settings.shiftStart} />
   const filename = `DrTJPH-OnCall-${month}`
 
   const copyPrevious = async () => {
@@ -52,53 +56,62 @@ export function ShiftsPage() {
     }
   }
 
+  const todayAssign = isCurrent ? data?.days?.[String(today.day)] ?? {} : {}
+  const wa = (name?: string) => {
+    const c = findContactByName(contacts, name)
+    return c ? (
+      <a href={whatsappUrl(c.phone)} target="_blank" rel="noopener noreferrer" className="text-wa hover:opacity-80" aria-label={`مراسلة ${name} عبر واتساب`}>
+        <WhatsAppIcon size={15} />
+      </a>
+    ) : null
+  }
+
   return (
-    <div className="anim-fade-up">
+    <div>
       <PageHeader
-        title="الكولات (الخفارات)"
-        subtitle={`خفارة ٢٤ ساعة تبدأ ${prettyTime(settings.shiftStart)} — على مدار الشهر`}
-        icon={<CalendarClock size={22} />}
+        title="الكولات"
+        subtitle={`جدول الخفارات الشهري — خفارة ٢٤ ساعة تبدأ ${prettyTime(settings.shiftStart)}`}
         actions={
-          <button type="button" className="btn btn-secondary btn-icon" onClick={() => printer.print(printDoc, filename)} aria-label="طباعة الجدول" disabled={loading}>
-            <Printer size={18} />
-          </button>
+          <>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => printer.print(printDoc(), filename)} disabled={loading}>
+              <Printer size={15} />
+              طباعة
+            </button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => printer.pdf(printDoc(), filename)} disabled={loading}>
+              <FileDown size={15} />
+              PDF
+            </button>
+          </>
         }
       />
 
-      {/* التنقل بين الأشهر */}
-      <div className="card mb-4 flex items-center gap-2 p-2">
-        <button type="button" className="btn btn-ghost btn-icon" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="الشهر السابق">
-          <ChevronRight size={20} />
-        </button>
-        <div className="flex-1 text-center">
-          <div className="font-display text-[1.08rem] font-bold">{monthTitle(month)}</div>
-          <div className="text-[0.75rem] text-muted">
-            {loading ? 'جارٍ التحميل…' : `${filled} من ${days} يوماً معبأ`}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="panel flex items-center">
+          <button type="button" className="btn btn-ghost btn-icon rounded-e-none" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="الشهر السابق">
+            <ChevronRight size={18} />
+          </button>
+          <div className="min-w-[9.5rem] border-x border-line px-3 text-center">
+            <div className="text-[0.95rem] font-bold">{monthTitle(month)}</div>
+            <div className="text-[0.72rem] text-muted">{loading ? 'جارٍ التحميل…' : `${filled} من ${days} يوماً معبأ`}</div>
           </div>
+          <button type="button" className="btn btn-ghost btn-icon rounded-s-none" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="الشهر التالي">
+            <ChevronLeft size={18} />
+          </button>
         </div>
-        <button type="button" className="btn btn-ghost btn-icon" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="الشهر التالي">
-          <ChevronLeft size={20} />
-        </button>
-      </div>
-
-      <div className="mb-4 flex flex-wrap gap-2">
         {!isCurrent && (
-          <button type="button" className="btn btn-soft btn-sm" onClick={() => setMonth(today.monthId)}>
-            العودة إلى الشهر الحالي
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setMonth(today.monthId)}>
+            الشهر الحالي
           </button>
         )}
-        <button type="button" className="btn btn-secondary btn-sm" onClick={() => printer.pdf(printDoc, filename)} disabled={loading}>
-          <FileDown size={16} />
-          ملف PDF
-        </button>
         {isAdmin && (
           <>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setNoteOpen(true)}>
-              <NotebookPen size={16} />
+            <span className="flex-1" />
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setNoteOpen(true)}>
+              <NotebookPen size={15} />
               ملاحظة الشهر
             </button>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={copyPrevious}>
-              <Copy size={16} />
+            <button type="button" className="btn btn-ghost btn-sm" onClick={copyPrevious}>
+              <Copy size={15} />
               نسخ من الشهر السابق
             </button>
           </>
@@ -106,82 +119,135 @@ export function ShiftsPage() {
       </div>
 
       {data?.note && (
-        <div className="mb-4 rounded-2xl border border-info/25 bg-info-soft px-4 py-3 text-[0.9rem] text-info">
+        <div className="mb-4 rounded-lg border border-info/25 bg-info-soft px-4 py-2.5 text-[0.88rem] text-info">
           <b>ملاحظة: </b>
           {data.note}
         </div>
       )}
 
+      {isCurrent && !loading && (
+        <section className="mb-6">
+          <SectionHeader title={`خفارة اليوم — ${weekdayOf(month, today.day)} ${today.day}`} />
+          <div className="panel grid overflow-hidden sm:grid-cols-2 lg:grid-cols-3">
+            {positions.map((p) => (
+              <div key={p.id} className="flex items-center gap-2 border-b border-e border-line px-4 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[0.74rem] text-muted">{p.label}</div>
+                  <div className={`truncate font-semibold ${todayAssign[p.id] ? 'text-ink' : 'text-faint'}`}>{todayAssign[p.id] || '—'}</div>
+                </div>
+                {wa(todayAssign[p.id])}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {loading ? (
         <div className="grid place-items-center py-16 text-brand">
-          <Spinner size={28} />
+          <Spinner size={24} />
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: days }, (_, i) => i + 1).map((d) => {
-            const isToday = isCurrent && d === today.day
-            const assign = data?.days?.[String(d)] ?? {}
-            const any = positions.some((p) => assign[p.id])
-            return (
-              <div
-                key={d}
-                ref={isToday ? todayRef : undefined}
-                className={`card overflow-hidden ${isToday ? 'border-brand/60 ring-2 ring-brand/30' : ''}`}
-              >
-                <div
-                  className={`flex items-center gap-2.5 px-3.5 py-2.5 ${
-                    isToday ? 'bg-brand text-on-brand' : isWeekend(month, d) ? 'bg-coral-soft' : 'bg-surface-2'
-                  }`}
-                >
-                  <span className={`grid size-9 place-items-center rounded-xl font-display text-[1.05rem] font-bold tabular-nums ${isToday ? 'bg-white/20' : 'bg-surface text-ink'}`}>
-                    {d}
-                  </span>
-                  <span className="flex-1 font-bold">{weekdayOf(month, d)}</span>
-                  {isToday && <span className="chip bg-white/20 text-[0.72rem]">خفارة اليوم</span>}
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => setEditDay(d)}
-                      className={`grid size-8 place-items-center rounded-lg ${isToday ? 'hover:bg-white/20' : 'text-muted hover:bg-surface-3 hover:text-brand'}`}
-                      aria-label={`تعديل خفارة يوم ${d}`}
+        <>
+          {/* جدول (الحاسوب) */}
+          <div className="panel hidden overflow-x-auto md:block">
+            <table className="w-full min-w-[44rem] text-[0.84rem]">
+              <thead className="sticky top-0 bg-surface-2 text-[0.78rem] text-muted">
+                <tr>
+                  <th className="w-28 border-b border-line px-3 py-2.5 text-start font-semibold">اليوم</th>
+                  {positions.map((p) => (
+                    <th key={p.id} className="border-b border-line px-3 py-2.5 text-start font-semibold">
+                      {p.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {dayList.map((d) => {
+                  const isToday = isCurrent && d === today.day
+                  const assign = data?.days?.[String(d)] ?? {}
+                  return (
+                    <tr
+                      key={d}
+                      ref={
+                        isToday
+                          ? (el) => {
+                              todayRow.current = el
+                            }
+                          : undefined
+                      }
+                      onClick={isAdmin ? () => setEditDay(d) : undefined}
+                      className={`border-b border-line last:border-0 ${isAdmin ? 'cursor-pointer hover:bg-surface-2' : ''} ${
+                        isToday ? 'bg-brand-soft' : isWeekend(month, d) ? 'bg-surface-2' : ''
+                      }`}
                     >
-                      <Pencil size={15} />
-                    </button>
-                  )}
+                      <td className="whitespace-nowrap px-3 py-2">
+                        <span className="inline-block w-6 font-bold tabular-nums text-ink">{d}</span>
+                        <span className={isToday ? 'font-semibold text-brand-ink' : 'text-muted'}>{weekdayOf(month, d)}</span>
+                      </td>
+                      {positions.map((p) => (
+                        <td key={p.id} className="px-3 py-2">
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className={assign[p.id] ? 'text-ink' : 'text-faint'}>{assign[p.id] || '—'}</span>
+                            {!isAdmin && wa(assign[p.id])}
+                          </span>
+                        </td>
+                      ))}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* قائمة الأيام (الهاتف) */}
+          <div className="panel divide-y divide-line overflow-hidden md:hidden">
+            {dayList.map((d) => {
+              const isToday = isCurrent && d === today.day
+              const assign = data?.days?.[String(d)] ?? {}
+              const any = positions.some((p) => assign[p.id])
+              return (
+                <div
+                  key={d}
+                  ref={
+                    isToday
+                      ? (el) => {
+                          todayItem.current = el
+                        }
+                      : undefined
+                  }
+                  className={`flex gap-3 px-4 py-3 ${isToday ? 'bg-brand-soft' : isWeekend(month, d) ? 'bg-surface-2' : ''}`}
+                >
+                  <div className="w-12 shrink-0 text-center">
+                    <div className={`text-[1.2rem] font-bold leading-tight tabular-nums ${isToday ? 'text-brand-ink' : 'text-ink'}`}>{d}</div>
+                    <div className="text-[0.7rem] text-muted">{weekdayOf(month, d)}</div>
+                  </div>
+                  <div className="min-w-0 flex-1 border-s border-line ps-3">
+                    {any ? (
+                      <dl className="space-y-0.5 text-[0.84rem]">
+                        {positions.map((p) =>
+                          assign[p.id] ? (
+                            <div key={p.id} className="flex items-center gap-2">
+                              <dt className="w-[45%] shrink-0 truncate text-muted">{p.label}</dt>
+                              <dd className="min-w-0 flex-1 truncate font-semibold text-ink">{assign[p.id]}</dd>
+                              {wa(assign[p.id])}
+                            </div>
+                          ) : null,
+                        )}
+                      </dl>
+                    ) : (
+                      <div className="py-1 text-[0.84rem] text-faint">لم تُحدَّد الخفارة</div>
+                    )}
+                    {isAdmin && (
+                      <button type="button" className="mt-1.5 text-[0.8rem] font-semibold text-brand-ink" onClick={() => setEditDay(d)} aria-label={`تعديل خفارة يوم ${d}`}>
+                        {any ? 'تعديل' : '+ تعيين الخفارة'}
+                      </button>
+                    )}
+                  </div>
                 </div>
-                {any ? (
-                  <dl className="divide-y divide-line">
-                    {positions.map((p) => {
-                      const name = assign[p.id]
-                      if (!name) return null
-                      const c = findContactByName(contacts, name)
-                      return (
-                        <div key={p.id} className="flex items-center gap-2 px-3.5 py-1.5 text-[0.86rem]">
-                          <dt className="w-[42%] shrink-0 truncate text-muted">{p.label}</dt>
-                          <dd className="min-w-0 flex-1 truncate font-semibold text-ink">{name}</dd>
-                          {c && (
-                            <a href={whatsappUrl(c.phone)} target="_blank" rel="noopener noreferrer" className="grid size-7 shrink-0 place-items-center rounded-lg text-wa hover:bg-surface-3" aria-label={`مراسلة ${name} عبر واتساب`}>
-                              <WhatsAppIcon size={16} />
-                            </a>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </dl>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={!isAdmin}
-                    onClick={() => setEditDay(d)}
-                    className="w-full px-3.5 py-4 text-center text-[0.84rem] text-muted enabled:hover:text-brand"
-                  >
-                    {isAdmin ? '+ تعيين الخفارة' : 'لم تُحدَّد الخفارة بعد'}
-                  </button>
-                )}
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        </>
       )}
 
       <DayEditor month={month} day={editDay} assignments={editDay ? data?.days?.[String(editDay)] ?? {} : {}} onClose={() => setEditDay(null)} />
@@ -217,12 +283,17 @@ function DayEditor({ month, day, assignments, onClose }: { month: string; day: n
       title={day ? `خفارة ${weekdayOf(month, day)} ${day} ${monthTitle(month)}` : ''}
       subtitle="اكتب الاسم أو اختره من دليل الهواتف"
       footer={
-        <button type="submit" form="day-form" className="btn btn-primary w-full">
-          حفظ
-        </button>
+        <div className="flex gap-2">
+          <button type="submit" form="day-form" className="btn btn-primary">
+            حفظ
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            إلغاء
+          </button>
+        </div>
       }
     >
-      <form id="day-form" onSubmit={submit} className="grid gap-3 pb-2 sm:grid-cols-2">
+      <form id="day-form" onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
         {settings.positions.map((p) => (
           <Field key={p.id} label={p.label}>
             <input className="input" list="contact-names" value={form[p.id] ?? ''} onChange={(e) => setForm({ ...form, [p.id]: e.target.value })} maxLength={80} />
@@ -245,7 +316,7 @@ function NoteEditor({ open, onClose, month, note }: { open: boolean; onClose: ()
     if (open) setValue(note)
   }, [open, note])
   return (
-    <Sheet open={open} onClose={onClose} title={`ملاحظة جدول ${monthTitle(month)}`} subtitle="تظهر أعلى الجدول وفي النسخة المطبوعة">
+    <Sheet open={open} onClose={onClose} size="sm" title={`ملاحظة جدول ${monthTitle(month)}`} subtitle="تظهر أعلى الجدول وفي النسخة المطبوعة">
       <form
         onSubmit={(e) => {
           e.preventDefault()
@@ -253,7 +324,7 @@ function NoteEditor({ open, onClose, month, note }: { open: boolean; onClose: ()
           toast('تم حفظ الملاحظة')
           onClose()
         }}
-        className="space-y-4 pb-2"
+        className="space-y-4"
       >
         <textarea className="input" rows={4} value={value} onChange={(e) => setValue(e.target.value)} maxLength={500} />
         <button type="submit" className="btn btn-primary w-full">

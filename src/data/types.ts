@@ -2,28 +2,50 @@ import type { Timestamp } from 'firebase/firestore'
 
 export type Role = 'admin' | 'staff'
 
-export type SectionKey = 'rooms' | 'icu'
+/** وحدة الإقامة في الردهة: غرفة أو سرير أو حاضنة */
+export type UnitKind = 'room' | 'bed' | 'incubator'
+
+/** مفاتيح العلامات الحيوية المتاحة */
+export type VitalKey = 'bp' | 'pulse' | 'spo2' | 'temp' | 'rr' | 'rbs' | 'drain' | 'uop' | 'weight'
+
+export type Population = 'adult' | 'neonate'
+
+/** حالة السرير: الثلاث الأولى تعني وجود مريض */
+export type BedStatus = 'occupied' | 'critical' | 'discharge' | 'empty' | 'reserved' | 'cleaning'
 
 export interface Position {
   id: string
   label: string
 }
 
+export interface Department {
+  id: string
+  name: string
+  description: string
+  /** منصب الخفارة المرتبط بالقسم (اختياري) */
+  position?: string
+}
+
 export interface AppSettings {
-  wardCount: number
-  defaultRooms: number
-  defaultBeds: number
   positions: Position[]
+  departments: Department[]
   shiftStart: string
+  wardsInitialized: boolean
 }
 
 export interface Ward {
   id: string
   order: number
-  number: string
   name: string
-  rooms: number
+  unit: UnitKind
   beds: number
+  /** تسمية حقل الإجراء: نوع العملية / نوع الإجراء / التشخيص */
+  procedureLabel: string
+  vitals: VitalKey[]
+  /** فئة المرضى (لحدود التنبيه في العلامات الحيوية) */
+  population: Population
+  /** ردهة افتراضية لم تُحفظ بعد في قاعدة البيانات */
+  virtual?: boolean
 }
 
 export interface Sheet {
@@ -32,37 +54,68 @@ export interface Sheet {
   resident: string
 }
 
-export interface SlotData {
-  roomNo: string
+export type Sex = 'ذكر' | 'أنثى' | ''
+
+export interface PatientData {
   patientName: string
+  age: string
+  sex: Sex
   doctorName: string
-  operation: string
-  bp: string
-  pulse: string
-  spo2: string
-  drain: string
-  uop: string
+  procedure: string
+  familyPhone: string
   notes: string
 }
 
-export interface Slot extends SlotData {
+export interface Bed extends PatientData {
   id: string
   wardId: string
-  section: SectionKey
   index: number
-  updatedAt?: Timestamp | null
-  updatedBy?: string
+  /** رقم السرير/الغرفة المعروض (قابل للتعديل) */
+  label: string
+  status: BedStatus
+  admissionId: string
+  admittedAt: Timestamp | null
+  vitals: Partial<Record<VitalKey, string>>
+  vitalsAt: Timestamp | null
+  vitalsBy: string
+  updatedAt: Timestamp | null
+  updatedBy: string
   pending?: boolean
 }
 
-export interface ArchivedPatient extends SlotData {
+export interface Observation {
   id: string
+  admissionId: string
+  values: Partial<Record<VitalKey, string>>
+  at: Timestamp | null
+  by: string
+}
+
+export interface ArchivedPatient extends PatientData {
+  id: string
+  admissionId: string
   wardId: string
-  wardNumber: string
-  section: SectionKey
-  index: number
-  dischargedAt?: Timestamp | null
-  dischargedBy?: string
+  wardName: string
+  bedLabel: string
+  unit: UnitKind
+  vitals: Partial<Record<VitalKey, string>>
+  admittedAt: Timestamp | null
+  dischargedAt: Timestamp | null
+  dischargeType: string
+  dischargeNote: string
+  dischargedBy: string
+}
+
+export type ActivityAction = 'admit' | 'update' | 'vitals' | 'status' | 'transfer' | 'discharge' | 'ward'
+
+export interface Activity {
+  id: string
+  action: ActivityAction
+  text: string
+  wardName: string
+  patientName: string
+  by: string
+  at: Timestamp | null
 }
 
 export interface Contact {
