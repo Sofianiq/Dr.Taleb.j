@@ -1,4 +1,13 @@
-import type { AppSettings, Role, SectionKey, SlotData } from '../data/types'
+import type {
+  AppSettings,
+  BedStatus,
+  Department,
+  PatientData,
+  Role,
+  UnitKind,
+  VitalKey,
+  Ward,
+} from '../data/types'
 
 export const HOSPITAL_AR = 'مستشفى الدكتور طالب الجنابي الأهلي'
 export const HOSPITAL_SHORT = 'مستشفى الدكتور طالب الجنابي'
@@ -20,13 +29,164 @@ export function roleOf(email: string | null | undefined): Role | null {
   return null
 }
 
-export const ROLE_LABEL: Record<Role, string> = { admin: 'المدير', staff: 'الكادر الطبي' }
+export const ROLE_LABEL: Record<Role, string> = { admin: 'الإدارة', staff: 'الكادر الطبي' }
+
+/* ------------------------------ الوحدات ------------------------------ */
+
+export const UNITS: Record<UnitKind, { one: string; many: string; the: string; code: string }> = {
+  room: { one: 'غرفة', many: 'غرف', the: 'الغرفة', code: 'R' },
+  bed: { one: 'سرير', many: 'أسرّة', the: 'السرير', code: 'B' },
+  incubator: { one: 'حاضنة', many: 'حاضنات', the: 'الحاضنة', code: 'I' },
+}
+
+/** "20 غرفة" / "5 أسرّة" حسب قواعد العدد */
+export function unitCount(n: number, unit: UnitKind): string {
+  const u = UNITS[unit]
+  if (n === 1) return `${u.one} واحد${unit === 'room' || unit === 'incubator' ? 'ة' : ''}`
+  if (n >= 3 && n <= 10) return `${n} ${u.many}`
+  return `${n} ${u.one}`
+}
+
+/* --------------------------- العلامات الحيوية --------------------------- */
+
+export interface VitalDef {
+  key: VitalKey
+  label: string
+  name: string
+  unit: string
+  placeholder: string
+  numeric: boolean
+}
+
+export const VITALS: Record<VitalKey, VitalDef> = {
+  bp: { key: 'bp', label: 'BP', name: 'ضغط الدم', unit: 'mmHg', placeholder: '120/80', numeric: false },
+  pulse: { key: 'pulse', label: 'Pulse', name: 'النبض', unit: 'bpm', placeholder: '80', numeric: true },
+  spo2: { key: 'spo2', label: 'SpO₂', name: 'تشبّع الأوكسجين', unit: '%', placeholder: '98', numeric: true },
+  temp: { key: 'temp', label: 'Temp', name: 'الحرارة', unit: '°C', placeholder: '37.0', numeric: true },
+  rr: { key: 'rr', label: 'RR', name: 'معدل التنفس', unit: '/min', placeholder: '16', numeric: true },
+  rbs: { key: 'rbs', label: 'RBS', name: 'سكر الدم', unit: 'mg/dL', placeholder: '110', numeric: true },
+  drain: { key: 'drain', label: 'Drain', name: 'التصريف', unit: 'ml', placeholder: '50', numeric: true },
+  uop: { key: 'uop', label: 'UOP', name: 'الإدرار', unit: 'ml', placeholder: '400', numeric: true },
+  weight: { key: 'weight', label: 'Wt', name: 'الوزن', unit: 'g', placeholder: '2500', numeric: true },
+}
+
+export const VITAL_ORDER: VitalKey[] = ['bp', 'pulse', 'spo2', 'temp', 'rr', 'rbs', 'drain', 'uop', 'weight']
+
+/* ------------------------------ حالات السرير ------------------------------ */
+
+export type Tone = 'brand' | 'critical' | 'info' | 'warn' | 'neutral' | 'muted'
+
+export const STATUS: Record<BedStatus, { label: string; tone: Tone; hasPatient: boolean }> = {
+  occupied: { label: 'مستقر', tone: 'brand', hasPatient: true },
+  critical: { label: 'حرج', tone: 'critical', hasPatient: true },
+  discharge: { label: 'جاهز للخروج', tone: 'info', hasPatient: true },
+  empty: { label: 'شاغر', tone: 'neutral', hasPatient: false },
+  reserved: { label: 'محجوز', tone: 'warn', hasPatient: false },
+  cleaning: { label: 'تنظيف وتعقيم', tone: 'muted', hasPatient: false },
+}
+
+export const PATIENT_STATUSES: BedStatus[] = ['occupied', 'critical', 'discharge']
+export const FREE_STATUSES: BedStatus[] = ['empty', 'reserved', 'cleaning']
+
+export const DISCHARGE_TYPES = [
+  'خروج بتحسّن',
+  'تحويل إلى مستشفى آخر',
+  'خروج على مسؤولية المريض',
+  'وفاة',
+]
+
+export const EMPTY_PATIENT: PatientData = {
+  patientName: '',
+  age: '',
+  sex: '',
+  doctorName: '',
+  procedure: '',
+  familyPhone: '',
+  notes: '',
+}
+
+/* ------------------------------ الردهات ------------------------------ */
+
+export const PROCEDURE_LABELS = ['نوع العملية', 'نوع الإجراء', 'التشخيص']
+
+/** الردهات الافتراضية للمستشفى — تُعدَّل وتُضاف ردهات أخرى من الإدارة */
+export const DEFAULT_WARDS: Ward[] = [
+  {
+    id: 'surgery',
+    order: 1,
+    name: 'ردهة الجراحة',
+    unit: 'room',
+    beds: 20,
+    procedureLabel: 'نوع العملية',
+    vitals: ['bp', 'pulse', 'spo2', 'temp', 'drain', 'uop'],
+    population: 'adult',
+  },
+  {
+    id: 'cathlab',
+    order: 2,
+    name: 'ردهة القسطرة',
+    unit: 'bed',
+    beds: 5,
+    procedureLabel: 'نوع الإجراء',
+    vitals: ['bp', 'pulse', 'spo2', 'rr', 'uop'],
+    population: 'adult',
+  },
+  {
+    id: 'nicu',
+    order: 3,
+    name: 'ردهة الخدج',
+    unit: 'bed',
+    beds: 5,
+    procedureLabel: 'التشخيص',
+    vitals: ['pulse', 'spo2', 'temp', 'rr', 'weight'],
+    population: 'neonate',
+  },
+]
+
+export const MAX_BEDS = 60
+
+/* ------------------------------ الأقسام ------------------------------ */
+
+export const DEFAULT_DEPARTMENTS: Department[] = [
+  {
+    id: 'surgical-ward',
+    name: 'ردهة العمليات الجراحية',
+    description: 'رعاية المرضى قبل العمليات الجراحية وبعدها ومتابعة حالتهم على مدار الساعة.',
+    position: 'surgeon',
+  },
+  {
+    id: 'cathlab',
+    name: 'صالة قسطرة القلب والشرايين',
+    description: 'القسطرة التشخيصية والعلاجية للقلب والشرايين وزرع الدعامات.',
+  },
+  { id: 'nicu', name: 'الخدج', description: 'العناية بالأطفال حديثي الولادة والخدج.' },
+  {
+    id: 'theatre',
+    name: 'العمليات',
+    description: 'صالات العمليات الكبرى والصغرى وفريق التخدير.',
+    position: 'anesthesia',
+  },
+  {
+    id: 'lab',
+    name: 'المختبر',
+    description: 'التحاليل المرضية والكيمياوية وبنك الدم على مدار ٢٤ ساعة.',
+    position: 'lab',
+  },
+  {
+    id: 'radiology',
+    name: 'الأشعة والسونار',
+    description: 'الأشعة السينية والسونار والفحوصات التصويرية.',
+    position: 'radiology',
+  },
+]
+
+/** حرف القسم حسب ترتيبه: A, B, C ... */
+export const deptLetter = (index: number) => String.fromCharCode(65 + (index % 26))
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  wardCount: 20,
-  defaultRooms: 20,
-  defaultBeds: 10,
   shiftStart: '08:00',
+  wardsInitialized: false,
+  departments: DEFAULT_DEPARTMENTS,
   positions: [
     { id: 'resident', label: 'الطبيب المقيم' },
     { id: 'surgeon', label: 'الجراح الخافر' },
@@ -38,111 +198,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ],
 }
 
-export const SECTIONS: Record<
-  SectionKey,
-  { letter: string; title: string; unit: string; unitPlural: string; short: string; code: string }
-> = {
-  rooms: {
-    letter: 'A',
-    title: 'غرف العمليات الجراحية',
-    unit: 'غرفة',
-    unitPlural: 'غرف',
-    short: 'الغرف',
-    code: 'R',
-  },
-  icu: {
-    letter: 'B',
-    title: 'ردهة الإنعاش القلبي',
-    unit: 'سرير',
-    unitPlural: 'أسرّة',
-    short: 'الأسرّة',
-    code: 'B',
-  },
-}
-
-export const EMPTY_SLOT: SlotData = {
-  roomNo: '',
-  patientName: '',
-  doctorName: '',
-  operation: '',
-  bp: '',
-  pulse: '',
-  spo2: '',
-  drain: '',
-  uop: '',
-  notes: '',
-}
-
-export const PATIENT_FIELDS: (keyof SlotData)[] = [
-  'patientName',
-  'doctorName',
-  'operation',
-  'bp',
-  'pulse',
-  'spo2',
-  'drain',
-  'uop',
-  'notes',
-]
-
 export const SHIFT_OPTIONS = ['صباحي', 'مسائي', 'ليلي', '٢٤ ساعة']
 
-export interface Department {
-  id: string
-  letter: string
-  name: string
-  description: string
-  /** معرّف منصب الخفارة المرتبط بالقسم (إن وجد) */
-  position?: string
-}
+/* ------------------------------ دليل الهواتف ------------------------------ */
 
-/** أقسام الكادر الطبي */
-export const DEPARTMENTS: Department[] = [
-  {
-    id: 'surgical-ward',
-    letter: 'A',
-    name: 'ردهة العمليات الجراحية',
-    description: 'رعاية المرضى قبل العمليات الجراحية وبعدها ومتابعة حالتهم على مدار الساعة.',
-    position: 'surgeon',
-  },
-  {
-    id: 'cathlab',
-    letter: 'B',
-    name: 'صالة قسطرة القلب والشرايين',
-    description: 'القسطرة التشخيصية والعلاجية للقلب والشرايين وزرع الدعامات.',
-  },
-  {
-    id: 'nicu',
-    letter: 'C',
-    name: 'الخدج',
-    description: 'العناية بالأطفال حديثي الولادة والخدج في الحاضنات.',
-  },
-  {
-    id: 'theatre',
-    letter: 'D',
-    name: 'العمليات',
-    description: 'صالات العمليات الكبرى والصغرى وفريق التخدير.',
-    position: 'anesthesia',
-  },
-  {
-    id: 'lab',
-    letter: 'E',
-    name: 'المختبر',
-    description: 'التحاليل المرضية والكيمياوية وبنك الدم على مدار ٢٤ ساعة.',
-    position: 'lab',
-  },
-  {
-    id: 'radiology',
-    letter: 'F',
-    name: 'الأشعة والسونار',
-    description: 'الأشعة السينية والسونار والفحوصات التصويرية.',
-    position: 'radiology',
-  },
-]
-
-/** تصنيفات دليل الهواتف: الأقسام الستة + فئات عامة */
-export const CONTACT_GROUPS: { id: string; label: string }[] = [
-  ...DEPARTMENTS.map((d) => ({ id: d.id, label: d.name })),
+const GENERAL_GROUPS: { id: string; label: string }[] = [
   { id: 'residents', label: 'الأطباء المقيمون' },
   { id: 'specialists', label: 'الأطباء الاختصاص' },
   { id: 'nursing', label: 'التمريض' },
@@ -150,6 +210,14 @@ export const CONTACT_GROUPS: { id: string; label: string }[] = [
   { id: 'administration', label: 'الإدارة' },
   { id: 'other', label: 'أخرى' },
 ]
+
+export function contactGroups(departments: Department[]): { id: string; label: string }[] {
+  return [...departments.map((d) => ({ id: d.id, label: d.name })), ...GENERAL_GROUPS]
+}
+
+export function groupLabel(id: string, departments: Department[]): string {
+  return contactGroups(departments).find((g) => g.id === id)?.label ?? 'أخرى'
+}
 
 export const CONTACT_ROLES = [
   'طبيب اختصاص',
@@ -162,7 +230,3 @@ export const CONTACT_ROLES = [
   'موظف استعلامات',
   'أخرى',
 ]
-
-export function groupLabel(id: string): string {
-  return CONTACT_GROUPS.find((g) => g.id === id)?.label ?? 'أخرى'
-}

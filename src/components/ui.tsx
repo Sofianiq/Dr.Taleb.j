@@ -5,12 +5,15 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, CheckCircle2, ChevronRight, Info, X, XCircle } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { AlertTriangle, Check, ChevronRight, Info, X } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import logoUrl from '../assets/logo.webp'
+import type { BedStatus } from '../data/types'
+import { STATUS, type Tone } from '../lib/constants'
 
 /* ---------------------------------- الشعار ---------------------------------- */
 
@@ -39,6 +42,7 @@ export function Sheet({
   children,
   footer,
   size = 'md',
+  headerExtra,
 }: {
   open: boolean
   onClose: () => void
@@ -46,7 +50,8 @@ export function Sheet({
   subtitle?: ReactNode
   children: ReactNode
   footer?: ReactNode
-  size?: 'md' | 'lg'
+  size?: 'sm' | 'md' | 'lg'
+  headerExtra?: ReactNode
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
   const onCloseRef = useRef(onClose)
@@ -71,29 +76,28 @@ export function Sheet({
   }, [open])
 
   if (!open) return null
+  const width = size === 'lg' ? 'sm:max-w-3xl' : size === 'sm' ? 'sm:max-w-md' : 'sm:max-w-xl'
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6" role="dialog" aria-modal="true">
-      <div className="anim-fade-in absolute inset-0 bg-[#04120b]/45 backdrop-blur-[2px]" onClick={onClose} />
+      <div className="anim-fade absolute inset-0 bg-[var(--overlay)]" onClick={onClose} />
       <div
         ref={panelRef}
         tabIndex={-1}
-        className={`anim-sheet sm:anim-pop relative flex max-h-[92dvh] w-full flex-col rounded-t-[1.6rem] bg-surface shadow-float outline-none sm:rounded-[1.6rem] ${
-          size === 'lg' ? 'sm:max-w-2xl' : 'sm:max-w-lg'
-        }`}
+        className={`anim-sheet relative flex max-h-[94dvh] w-full flex-col rounded-t-[14px] border border-line bg-surface shadow-[0_24px_60px_-20px_rgb(0_0_0/0.35)] outline-none sm:rounded-[12px] ${width}`}
       >
-        <div className="mx-auto mt-2.5 h-1.5 w-11 shrink-0 rounded-full bg-line-strong sm:hidden" />
-        <header className="flex shrink-0 items-start gap-3 px-5 pb-3 pt-3 sm:pt-5">
+        <header className="flex shrink-0 items-start gap-3 border-b border-line px-5 py-3.5">
           <div className="min-w-0 flex-1">
-            <h2 className="text-[1.08rem] font-bold text-ink">{title}</h2>
-            {subtitle && <div className="mt-0.5 text-[0.83rem] text-muted">{subtitle}</div>}
+            <h2 className="text-[1.02rem] font-bold text-ink">{title}</h2>
+            {subtitle && <div className="mt-0.5 text-[0.82rem] text-muted">{subtitle}</div>}
           </div>
-          <button type="button" className="btn btn-ghost btn-icon -me-2 -mt-1" onClick={onClose} aria-label="إغلاق">
-            <X size={20} />
+          {headerExtra}
+          <button type="button" className="btn btn-ghost btn-sm btn-icon -me-1.5" onClick={onClose} aria-label="إغلاق">
+            <X size={18} />
           </button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
         {footer && (
-          <footer className="shrink-0 border-t border-line bg-surface px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:rounded-b-[1.6rem]">
+          <footer className="shrink-0 border-t border-line bg-surface-2 px-5 pb-[max(0.85rem,env(safe-area-inset-bottom))] pt-3 sm:rounded-b-[12px]">
             {footer}
           </footer>
         )}
@@ -119,27 +123,27 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const push = useCallback((text: string, kind: ToastKind = 'success') => {
     const id = Date.now() + Math.random()
     setItems((list) => [...list.filter((t) => t.text !== text).slice(-2), { id, kind, text }])
-    window.setTimeout(() => setItems((list) => list.filter((t) => t.id !== id)), kind === 'error' ? 5200 : 2800)
+    window.setTimeout(() => setItems((list) => list.filter((t) => t.id !== id)), kind === 'error' ? 5200 : 2600)
   }, [])
 
   return (
     <ToastContext.Provider value={push}>
       {children}
       {createPortal(
-        <div className="pointer-events-none fixed inset-x-0 top-[max(0.75rem,env(safe-area-inset-top))] z-[70] flex flex-col items-center gap-2 px-4">
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5.2rem+env(safe-area-inset-bottom))] z-[70] flex flex-col items-center gap-2 px-4 lg:bottom-6">
           {items.map((t) => (
             <div
               key={t.id}
               role="status"
-              className={`anim-pop pointer-events-auto flex max-w-md items-center gap-2.5 rounded-2xl px-4 py-3 text-[0.92rem] font-semibold shadow-float ${
-                t.kind === 'error'
-                  ? 'bg-accent text-white'
-                  : t.kind === 'info'
-                    ? 'bg-ink text-bg'
-                    : 'bg-brand text-on-brand'
-              }`}
+              className="anim-sheet pointer-events-auto flex max-w-md items-center gap-2.5 rounded-lg bg-[#16201c] px-3.5 py-2.5 text-[0.88rem] font-medium text-white shadow-[0_10px_30px_-10px_rgb(0_0_0/0.5)]"
             >
-              {t.kind === 'error' ? <XCircle size={19} /> : t.kind === 'info' ? <Info size={19} /> : <CheckCircle2 size={19} />}
+              <span
+                className={`grid size-5 shrink-0 place-items-center rounded-full ${
+                  t.kind === 'error' ? 'bg-[#e5484d]' : t.kind === 'info' ? 'bg-[#4b8fd4]' : 'bg-[#2ea66b]'
+                }`}
+              >
+                {t.kind === 'error' ? <X size={12} strokeWidth={3} /> : t.kind === 'info' ? <Info size={12} strokeWidth={3} /> : <Check size={12} strokeWidth={3} />}
+              </span>
               <span>{t.text}</span>
             </div>
           ))}
@@ -165,10 +169,7 @@ const ConfirmContext = createContext<(o: ConfirmOptions) => Promise<boolean>>(as
 
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<(ConfirmOptions & { resolve: (v: boolean) => void }) | null>(null)
-  const confirm = useCallback(
-    (o: ConfirmOptions) => new Promise<boolean>((resolve) => setState({ ...o, resolve })),
-    [],
-  )
+  const confirm = useCallback((o: ConfirmOptions) => new Promise<boolean>((resolve) => setState({ ...o, resolve })), [])
   const close = (v: boolean) => {
     state?.resolve(v)
     setState(null)
@@ -179,24 +180,25 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       <Sheet
         open={!!state}
         onClose={() => close(false)}
+        size="sm"
         title={
           <span className="flex items-center gap-2">
-            {state?.danger && <AlertTriangle size={20} className="text-accent" />}
+            {state?.danger && <AlertTriangle size={18} className="text-critical" />}
             {state?.title}
           </span>
         }
         footer={
-          <div className="flex gap-2.5">
-            <button type="button" className={`btn flex-1 ${state?.danger ? 'bg-accent text-white' : 'btn-primary'}`} onClick={() => close(true)}>
+          <div className="flex flex-row-reverse gap-2">
+            <button type="button" className={`btn ${state?.danger ? 'btn-solid-danger' : 'btn-primary'}`} onClick={() => close(true)}>
               {state?.confirmLabel ?? 'تأكيد'}
             </button>
-            <button type="button" className="btn btn-secondary flex-1" onClick={() => close(false)}>
+            <button type="button" className="btn btn-secondary" onClick={() => close(false)}>
               إلغاء
             </button>
           </div>
         }
       >
-        {state?.message && <div className="text-[0.95rem] leading-relaxed text-ink-2">{state.message}</div>}
+        {state?.message && <div className="text-[0.93rem] leading-relaxed text-ink-2">{state.message}</div>}
       </Sheet>
     </ConfirmContext.Provider>
   )
@@ -211,45 +213,49 @@ export function PageHeader({
   subtitle,
   back,
   actions,
-  icon,
 }: {
   title: ReactNode
   subtitle?: ReactNode
-  back?: string | boolean
+  back?: { to: string; label: string }
   actions?: ReactNode
-  icon?: ReactNode
 }) {
-  const navigate = useNavigate()
   return (
-    <div className="mb-4 flex items-center gap-3">
+    <div className="mb-5">
       {back && (
-        <button
-          type="button"
-          className="btn btn-secondary btn-icon shrink-0"
-          aria-label="رجوع"
-          onClick={() => (typeof back === 'string' ? navigate(back) : navigate(-1))}
-        >
-          <ChevronRight size={20} />
-        </button>
+        <Link to={back.to} className="mb-1.5 inline-flex items-center gap-0.5 text-[0.82rem] font-semibold text-muted hover:text-brand-ink">
+          <ChevronRight size={15} />
+          {back.label}
+        </Link>
       )}
-      {icon && !back && (
-        <div className="grid size-11 shrink-0 place-items-center rounded-2xl bg-brand-soft text-brand-ink">{icon}</div>
-      )}
-      <div className="min-w-0 flex-1">
-        <h1 className="truncate text-[1.3rem] font-bold text-ink">{title}</h1>
-        {subtitle && <div className="truncate text-[0.85rem] text-muted">{subtitle}</div>}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-[1.35rem] font-bold leading-tight text-ink">{title}</h1>
+          {subtitle && <div className="mt-1 text-[0.86rem] text-muted">{subtitle}</div>}
+        </div>
+        {actions && <div className="flex flex-wrap items-center gap-2 sm:shrink-0">{actions}</div>}
+      </div>
+    </div>
+  )
+}
+
+export function SectionHeader({ title, meta, actions }: { title: ReactNode; meta?: ReactNode; actions?: ReactNode }) {
+  return (
+    <div className="mb-2.5 flex items-end justify-between gap-3">
+      <div className="min-w-0">
+        <h2 className="text-[0.98rem] font-bold text-ink">{title}</h2>
+        {meta && <div className="text-[0.8rem] text-muted">{meta}</div>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </div>
   )
 }
 
-export function EmptyState({ icon, title, children }: { icon: ReactNode; title: string; children?: ReactNode }) {
+export function EmptyState({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center px-6 py-10 text-center">
-      <div className="mb-3 grid size-16 place-items-center rounded-3xl bg-surface-3 text-muted">{icon}</div>
-      <div className="font-display text-[1.02rem] font-bold text-ink">{title}</div>
-      {children && <div className="mt-1 max-w-xs text-[0.88rem] leading-relaxed text-muted">{children}</div>}
+    <div className="px-6 py-9 text-center">
+      <div className="text-[0.95rem] font-semibold text-ink">{title}</div>
+      {children && <div className="mx-auto mt-1 max-w-sm text-[0.86rem] leading-relaxed text-muted">{children}</div>}
+      {action && <div className="mt-4">{action}</div>}
     </div>
   )
 }
@@ -259,14 +265,16 @@ export function Segmented<T extends string>({
   onChange,
   options,
   className = '',
+  size = 'md',
 }: {
   value: T
   onChange: (v: T) => void
-  options: { value: T; label: ReactNode; badge?: ReactNode }[]
+  options: { value: T; label: ReactNode }[]
   className?: string
+  size?: 'sm' | 'md'
 }) {
   return (
-    <div className={`flex gap-1 rounded-2xl border border-line bg-surface-3 p-1 ${className}`} role="tablist">
+    <div className={`inline-flex rounded-lg border border-line-strong bg-surface p-0.5 ${className}`} role="tablist">
       {options.map((o) => {
         const active = o.value === value
         return (
@@ -276,12 +284,11 @@ export function Segmented<T extends string>({
             role="tab"
             aria-selected={active}
             onClick={() => onChange(o.value)}
-            className={`flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl px-3 text-[0.88rem] font-semibold transition ${
-              active ? 'bg-surface text-brand-ink shadow-soft' : 'text-muted hover:text-ink'
-            }`}
+            className={`flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 font-semibold transition-colors ${
+              size === 'sm' ? 'min-h-8 text-[0.8rem]' : 'min-h-9 text-[0.86rem]'
+            } ${active ? 'bg-ink text-surface' : 'text-muted hover:text-ink'}`}
           >
             {o.label}
-            {o.badge}
           </button>
         )
       })}
@@ -289,7 +296,42 @@ export function Segmented<T extends string>({
   )
 }
 
-export function Spinner({ size = 20, className = '' }: { size?: number; className?: string }) {
+/** تبويبات بخط سفلي (للصفحات والنوافذ) */
+export function Tabs<T extends string>({
+  value,
+  onChange,
+  options,
+  className = '',
+}: {
+  value: T
+  onChange: (v: T) => void
+  options: { value: T; label: ReactNode }[]
+  className?: string
+}) {
+  return (
+    <div className={`no-scrollbar flex gap-5 overflow-x-auto border-b border-line ${className}`} role="tablist">
+      {options.map((o) => {
+        const active = o.value === value
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(o.value)}
+            className={`-mb-px flex shrink-0 items-center gap-1.5 border-b-2 pb-2.5 pt-1 text-[0.88rem] font-semibold transition-colors ${
+              active ? 'border-brand text-ink' : 'border-transparent text-muted hover:text-ink'
+            }`}
+          >
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+export function Spinner({ size = 18, className = '' }: { size?: number; className?: string }) {
   return (
     <span
       className={`inline-block animate-spin rounded-full border-2 border-current border-e-transparent ${className}`}
@@ -314,35 +356,67 @@ export function Field({
     <label className={`block ${className}`}>
       <span className="field-label">{label}</span>
       {children}
-      {hint && <span className="mt-1 block text-[0.78rem] text-muted">{hint}</span>}
+      {hint && <span className="mt-1 block text-[0.76rem] text-muted">{hint}</span>}
     </label>
   )
 }
 
-export function StatTile({
-  label,
-  value,
-  icon,
-  tone = 'brand',
-}: {
-  label: string
-  value: ReactNode
-  icon: ReactNode
-  tone?: 'brand' | 'accent' | 'info' | 'coral'
-}) {
-  const tones = {
-    brand: 'bg-brand-soft text-brand-ink',
-    accent: 'bg-accent-soft text-accent',
-    info: 'bg-info-soft text-info',
-    coral: 'bg-coral-soft text-coral',
-  }
+/* ------------------------------- الحالات والألوان ------------------------------- */
+
+export const TONE_TEXT: Record<Tone, string> = {
+  brand: 'text-brand-ink',
+  critical: 'text-critical',
+  info: 'text-info',
+  warn: 'text-warn',
+  neutral: 'text-muted',
+  muted: 'text-faint',
+}
+export const TONE_BG: Record<Tone, string> = {
+  brand: 'bg-brand-soft text-brand-ink',
+  critical: 'bg-critical-soft text-critical',
+  info: 'bg-info-soft text-info',
+  warn: 'bg-warn-soft text-warn',
+  neutral: 'bg-surface-3 text-muted',
+  muted: 'bg-surface-3 text-faint',
+}
+export const TONE_DOT: Record<Tone, string> = {
+  brand: 'bg-brand',
+  critical: 'bg-critical',
+  info: 'bg-info',
+  warn: 'bg-warn',
+  neutral: 'bg-line-strong',
+  muted: 'bg-faint',
+}
+
+export function StatusTag({ status, className = '' }: { status: BedStatus; className?: string }) {
+  const st = STATUS[status]
   return (
-    <div className="card flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:gap-3 sm:p-3.5">
-      <div className={`grid size-9 shrink-0 place-items-center rounded-xl sm:size-10 ${tones[tone]}`}>{icon}</div>
-      <div className="min-w-0">
-        <div className="font-display text-[1.25rem] font-bold leading-tight text-ink tabular-nums">{value}</div>
-        <div className="text-[0.76rem] leading-snug text-muted">{label}</div>
-      </div>
+    <span className={`tag ${TONE_BG[st.tone]} ${className}`}>
+      <span className={`size-1.5 rounded-full ${TONE_DOT[st.tone]}`} />
+      {st.label}
+    </span>
+  )
+}
+
+/** شريط مؤشرات أفقي مقسّم بخطوط رفيعة */
+export function MetricStrip({ items }: { items: { label: string; value: ReactNode; tone?: Tone; hint?: string }[] }) {
+  return (
+    <div
+      className="panel grid grid-cols-2 overflow-hidden sm:grid-cols-[repeat(var(--cols),minmax(0,1fr))]"
+      style={{ '--cols': items.length } as CSSProperties}
+    >
+      {items.map((m, i) => (
+        <div
+          key={m.label}
+          className={`border-line px-4 py-3 ${i % 2 === 1 ? 'border-s' : ''} ${i >= 2 ? 'border-t sm:border-t-0' : ''} ${i > 0 ? 'sm:border-s' : ''}`}
+        >
+          <div className="text-[0.76rem] font-semibold text-muted">{m.label}</div>
+          <div className={`mt-0.5 text-[1.45rem] font-bold leading-tight tabular-nums ${m.tone ? TONE_TEXT[m.tone] : 'text-ink'}`}>
+            {m.value}
+          </div>
+          {m.hint && <div className="text-[0.72rem] text-faint">{m.hint}</div>}
+        </div>
+      ))}
     </div>
   )
 }

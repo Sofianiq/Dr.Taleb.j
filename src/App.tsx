@@ -7,6 +7,7 @@ import { DataProvider } from './data/store'
 import { MANAGED_BY } from './lib/constants'
 import { PrintProvider } from './print/PrintProvider'
 import { AdminPage } from './pages/Admin'
+import { ActivityPage, ArchivePage, DepartmentsManagerPage, WardsManagerPage } from './pages/AdminTools'
 import { InquiriesPage } from './pages/Inquiries'
 import { Intro } from './pages/Intro'
 import { Login } from './pages/Login'
@@ -27,11 +28,11 @@ function readIntroSeen(): boolean {
 
 function Splash() {
   return (
-    <div className="grid min-h-dvh place-items-center bg-bg">
+    <div className="grid min-h-dvh place-items-center bg-surface">
       <div className="flex flex-col items-center gap-4">
-        <Logo size={96} className="shadow-card" />
-        <Spinner size={24} className="text-brand" />
-        <div className="text-[0.85rem] font-semibold text-muted">{MANAGED_BY}</div>
+        <Logo size={84} className="ring-1 ring-line" />
+        <Spinner size={20} className="text-brand" />
+        <div className="text-[0.84rem] font-semibold text-muted">{MANAGED_BY}</div>
       </div>
     </div>
   )
@@ -90,6 +91,10 @@ function Root() {
         <Route path="/inquiries" element={<InquiriesPage />} />
         <Route path="/shifts" element={<ShiftsPage />} />
         <Route path="/admin" element={<AdminPage />} />
+        <Route path="/admin/wards" element={<WardsManagerPage />} />
+        <Route path="/admin/departments" element={<DepartmentsManagerPage />} />
+        <Route path="/admin/activity" element={<ActivityPage />} />
+        <Route path="/admin/archive" element={<ArchivePage />} />
       </Route>
       <Route path="*" element={<Navigate to="/resident" replace />} />
     </Routes>

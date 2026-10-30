@@ -1,63 +1,106 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
-import {
-  Archive,
-  ArrowDown,
-  ArrowUp,
-  BarChart3,
-  BedDouble,
-  BookUser,
-  Building2,
-  DoorOpen,
-  KeyRound,
-  ListChecks,
-  LogOut,
-  Megaphone,
-  Plus,
-  Search,
-  Settings2,
-  Trash2,
-  Users,
-} from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { ChevronLeft, Plus, Trash2 } from 'lucide-react'
 import { ChangePasswordSheet } from '../components/AccountSheet'
-import { EmptyState, Field, Logo, PageHeader, Segmented, Sheet, StatTile, useConfirm, useToast } from '../components/ui'
-import { addAnnouncement, deleteAnnouncement, deleteArchived, saveSettings } from '../data/actions'
+import { EmptyState, Field, MetricStrip, PageHeader, SectionHeader, Segmented, Sheet, StatusTag, useConfirm, useToast } from '../components/ui'
+import { addAnnouncement, deleteAnnouncement, saveSettings } from '../data/actions'
 import { useAuth } from '../data/auth'
-import { useArchive, useData } from '../data/store'
-import type { AnnouncementLevel, Position } from '../data/types'
+import { bedLabel, hasPatient, useActivity, useArchive, useCensus, useData, wardBeds } from '../data/store'
+import type { Activity, AnnouncementLevel, Position } from '../data/types'
 import { logout } from '../lib/auth'
-import { HOSPITAL_AR, MANAGED_BY, ROLE_LABEL, SECTIONS } from '../lib/constants'
-import { dateTime, timeAgo } from '../lib/dates'
-import { twoDigits } from '../lib/ids'
-import { useWardOccupancy } from './Resident'
+import { HOSPITAL_AR, MANAGED_BY, UNITS } from '../lib/constants'
+import { clock, isToday, timeAgo } from '../lib/dates'
+import { shortId } from '../lib/ids'
 
-const LEVELS: Record<AnnouncementLevel, { label: string; cls: string; bar: string }> = {
-  normal: { label: 'عادي', cls: 'bg-surface-3 text-ink-2', bar: 'bg-line-strong' },
-  important: { label: 'مهم', cls: 'bg-warn-soft text-warn', bar: 'bg-warn' },
-  urgent: { label: 'عاجل', cls: 'bg-accent-soft text-accent', bar: 'bg-accent' },
+export const LEVELS: Record<AnnouncementLevel, { label: string; cls: string; bar: string }> = {
+  normal: { label: 'عادي', cls: 'bg-surface-3 text-muted', bar: 'border-s-line-strong' },
+  important: { label: 'مهم', cls: 'bg-warn-soft text-warn', bar: 'border-s-warn' },
+  urgent: { label: 'عاجل', cls: 'bg-critical-soft text-critical', bar: 'border-s-critical' },
+}
+
+export const ACTION_LABEL: Record<Activity['action'], string> = {
+  admit: 'دخول',
+  discharge: 'خروج',
+  transfer: 'نقل',
+  vitals: 'علامات حيوية',
+  status: 'حالة',
+  update: 'تحديث',
+  ward: 'ردهة',
+}
+
+export function ActivityList({ list }: { list: Activity[] }) {
+  return (
+    <ul className="divide-y divide-line">
+      {list.map((a) => {
+        const at = a.at?.toDate()
+        return (
+          <li key={a.id} className="flex gap-3 px-4 py-2.5">
+            <span className="w-14 shrink-0 pt-0.5 text-[0.74rem] tabular-nums text-faint">{at ? clock(at) : ''}</span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[0.86rem] text-ink">
+                <span className="me-1.5 rounded bg-surface-3 px-1.5 py-px text-[0.7rem] font-semibold text-muted">{ACTION_LABEL[a.action]}</span>
+                {a.text}
+              </div>
+              <div className="truncate text-[0.74rem] text-muted">
+                {[a.wardName, a.by, at && !isToday(at) ? timeAgo(at) : ''].filter(Boolean).join(' · ')}
+              </div>
+            </div>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+function ToolRow({ title, sub, to, onClick, danger }: { title: string; sub?: string; to?: string; onClick?: () => void; danger?: boolean }) {
+  const inner = (
+    <>
+      <span className="min-w-0 flex-1">
+        <span className={`block font-semibold ${danger ? 'text-critical' : 'text-ink'}`}>{title}</span>
+        {sub && <span className="block truncate text-[0.78rem] text-muted">{sub}</span>}
+      </span>
+      {!danger && <ChevronLeft size={17} className="shrink-0 text-faint" />}
+    </>
+  )
+  const cls = 'flex w-full items-center gap-3 px-4 py-3 text-start transition-colors hover:bg-surface-2'
+  return to ? (
+    <Link to={to} className={cls}>
+      {inner}
+    </Link>
+  ) : (
+    <button type="button" onClick={onClick} className={cls}>
+      {inner}
+    </button>
+  )
 }
 
 export function AdminPage() {
   const { isAdmin, role } = useAuth()
-  const { wards, contacts, announcements } = useData()
-  const occupancy = useWardOccupancy()
+  const { wards, beds, announcements, contacts, settings } = useData()
+  const { byWard, total } = useCensus()
+  const { list: activity } = useActivity(true, 12)
+  const { list: archive } = useArchive(true)
   const confirm = useConfirm()
   const toast = useToast()
   const [annOpen, setAnnOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [positionsOpen, setPositionsOpen] = useState(false)
   const [pwOpen, setPwOpen] = useState(false)
-  const [archiveOpen, setArchiveOpen] = useState(false)
 
-  const totals = useMemo(() => {
-    let rooms = 0
-    let icu = 0
-    for (const w of wards) {
-      rooms += occupancy[w.id]?.rooms ?? 0
-      icu += occupancy[w.id]?.icu ?? 0
-    }
-    return { rooms, icu }
-  }, [wards, occupancy])
+  const today = useMemo(() => {
+    let admitted = 0
+    for (const w of wards) for (const b of wardBeds(w, beds)) if (hasPatient(b) && isToday(b.admittedAt?.toDate())) admitted++
+    admitted += archive.filter((a) => isToday(a.admittedAt?.toDate())).length
+    const discharged = archive.filter((a) => isToday(a.dischargedAt?.toDate())).length
+    return { admitted, discharged }
+  }, [wards, beds, archive])
+
+  const criticalList = useMemo(
+    () => wards.flatMap((w) => wardBeds(w, beds).filter((b) => b.status === 'critical').map((b) => ({ ward: w, bed: b }))),
+    [wards, beds],
+  )
+
+  const occupancy = total.capacity ? Math.round((total.patients / total.capacity) * 100) : 0
 
   const removeAnnouncement = async (id: string, title: string) => {
     const ok = await confirm({ title: 'حذف التبليغ', message: `هل تريد حذف «${title}»؟`, confirmLabel: 'حذف', danger: true })
@@ -66,136 +109,158 @@ export function AdminPage() {
   }
 
   return (
-    <div className="anim-fade-up">
-      <PageHeader title="الإدارة" subtitle={isAdmin ? 'لوحة التحكم — صلاحيات كاملة' : 'التبليغات والإحصائيات'} icon={<Building2 size={22} />} />
-
-      {/* هوية المستشفى */}
-      <div className="relative mb-4 overflow-hidden rounded-[1.4rem] bg-gradient-to-l from-[#06432a] via-[#0b6a40] to-[#14935a] p-5 text-white shadow-card">
-        <div className="pattern-bg absolute inset-0 opacity-60" />
-        <div className="relative flex items-center gap-4">
-          <Logo size={68} className="ring-2 ring-white/70" />
-          <div className="min-w-0">
-            <div className="font-display text-[1.1rem] font-bold leading-snug">{HOSPITAL_AR}</div>
-            <div className="text-[0.88rem] font-semibold text-white/90">{MANAGED_BY}</div>
-            <div className="mt-1 text-[0.76rem] text-white/70">تأسست عام ٢٠٠٢ — الفلوجة — خدمة على مدار ٢٤ ساعة</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="mb-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-        <StatTile label="إجمالي المرضى" value={totals.rooms + totals.icu} icon={<Users size={20} />} />
-        <StatTile label="غرف العمليات المشغولة" value={totals.rooms} icon={<DoorOpen size={20} />} tone="info" />
-        <StatTile label="أسرّة الإنعاش المشغولة" value={totals.icu} icon={<BedDouble size={20} />} tone="accent" />
-        <StatTile label="أرقام الكادر" value={contacts.length} icon={<BookUser size={20} />} tone="coral" />
-      </div>
-
-      {/* التبليغات */}
-      <section className="mb-6">
-        <div className="mb-2.5 flex items-center justify-between gap-2">
-          <h2 className="section-title flex items-center gap-2">
-            <Megaphone size={18} className="text-brand" />
-            التعاميم والتبليغات
-          </h2>
-          {isAdmin && (
+    <div>
+      <PageHeader
+        title="الإدارة"
+        subtitle={`${HOSPITAL_AR} — ${MANAGED_BY}`}
+        actions={
+          isAdmin && (
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setAnnOpen(true)}>
-              <Plus size={16} />
+              <Plus size={15} />
               تبليغ جديد
             </button>
-          )}
-        </div>
-        {announcements.length === 0 ? (
-          <div className="card">
-            <EmptyState icon={<Megaphone size={26} />} title="لا توجد تبليغات">
-              {isAdmin ? 'أرسل تبليغاً يظهر فوراً لجميع الكادر.' : 'تظهر هنا تبليغات الإدارة فور نشرها.'}
-            </EmptyState>
-          </div>
-        ) : (
-          <div className="space-y-2.5">
-            {announcements.map((a) => {
-              const lv = LEVELS[a.level]
-              const at = a.createdAt?.toDate?.()
-              return (
-                <article key={a.id} className="card relative overflow-hidden p-4 ps-5">
-                  <span className={`absolute inset-y-0 start-0 w-1.5 ${lv.bar}`} />
-                  <div className="flex items-start gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="font-bold text-ink">{a.title}</h3>
-                        {a.level !== 'normal' && <span className={`chip ${lv.cls}`}>{lv.label}</span>}
-                      </div>
-                      {a.body && <p className="mt-1 whitespace-pre-line text-[0.92rem] leading-relaxed text-ink-2">{a.body}</p>}
-                      <div className="mt-2 text-[0.75rem] text-muted">
-                        {a.author} {at && `• ${timeAgo(at)}`}
-                      </div>
+          )
+        }
+      />
+
+      <div className="mb-6">
+        <MetricStrip
+          items={[
+            { label: 'المرضى الحاليون', value: total.patients },
+            { label: 'نسبة الإشغال', value: `${occupancy}%`, hint: `${total.patients} من ${total.capacity}` },
+            { label: 'حالات حرجة', value: total.critical, tone: total.critical ? 'critical' : undefined },
+            { label: 'جاهز للخروج', value: total.discharge, tone: total.discharge ? 'info' : undefined },
+            { label: 'دخول اليوم', value: today.admitted },
+            { label: 'خروج اليوم', value: today.discharged },
+          ]}
+        />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-6">
+          <section>
+            <SectionHeader title="إشغال الردهات" meta="عدد المرضى من السعة الكلية لكل ردهة" />
+            <div className="panel space-y-3 p-4">
+              {wards.length === 0 && <div className="text-[0.86rem] text-muted">لا توجد ردهات.</div>}
+              {wards.map((w) => {
+                const c = byWard[w.id]
+                const pct = c.capacity ? (c.patients / c.capacity) * 100 : 0
+                return (
+                  <Link key={w.id} to={`/resident/ward/${w.id}`} className="block" title={`${w.name}: ${c.patients} من ${c.capacity}`}>
+                    <div className="mb-1 flex items-baseline justify-between gap-2 text-[0.84rem]">
+                      <span className="font-semibold text-ink">{w.name}</span>
+                      <span className="num text-muted">
+                        {c.patients} / {c.capacity}
+                      </span>
                     </div>
-                    {isAdmin && (
-                      <button type="button" className="btn btn-ghost btn-icon -me-2 -mt-1 text-muted hover:text-accent" onClick={() => removeAnnouncement(a.id, a.title)} aria-label="حذف التبليغ">
-                        <Trash2 size={17} />
-                      </button>
-                    )}
-                  </div>
-                </article>
-              )
-            })}
-          </div>
-        )}
-      </section>
+                    <div className="h-2 overflow-hidden rounded-[4px] bg-chart-track">
+                      <div className="h-full rounded-e-[4px] bg-chart" style={{ width: `${pct}%` }} />
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          </section>
 
-      {/* نسبة الإشغال */}
-      <section className="mb-6">
-        <h2 className="section-title mb-0.5 flex items-center gap-2">
-          <BarChart3 size={18} className="text-brand" />
-          إشغال الردهات
-        </h2>
-        <p className="mb-2.5 text-[0.8rem] text-muted">عدد المرضى من السعة الكلية (غرف العمليات + أسرّة الإنعاش) لكل ردهة</p>
-        <div className="card space-y-1 p-4">
-          {wards.map((w) => {
-            const occ = (occupancy[w.id]?.rooms ?? 0) + (occupancy[w.id]?.icu ?? 0)
-            const cap = w.rooms + w.beds
-            const pct = cap ? Math.round((occ / cap) * 100) : 0
-            return (
-              <Link
-                key={w.id}
-                to={`/resident/ward/${w.id}`}
-                className="group flex items-center gap-3 rounded-lg py-1 hover:bg-surface-2"
-                title={`ردهة ${w.number}: ${occ} من ${cap} (${pct}%) — غرف ${occupancy[w.id]?.rooms ?? 0}، إنعاش ${occupancy[w.id]?.icu ?? 0}`}
-              >
-                <span className="w-16 shrink-0 truncate text-[0.82rem] font-semibold text-ink-2">ردهة {w.number}</span>
-                <span className="relative h-3 flex-1 overflow-hidden rounded-[4px] bg-chart-track">
-                  <span
-                    className="absolute inset-y-0 start-0 rounded-e-[4px] bg-chart transition-[width] duration-500"
-                    style={{ width: `${pct}%` }}
-                  />
-                </span>
-                <span className="w-14 shrink-0 text-end text-[0.8rem] font-semibold text-ink-2 tabular-nums">
-                  {occ}/{cap}
-                </span>
-              </Link>
-            )
-          })}
+          <section>
+            <SectionHeader title="الحالات الحرجة" meta={criticalList.length ? `${criticalList.length} مريض` : undefined} />
+            <div className="panel overflow-hidden">
+              {criticalList.length === 0 ? (
+                <EmptyState title="لا توجد حالات حرجة حالياً" />
+              ) : (
+                <ul className="divide-y divide-line">
+                  {criticalList.map(({ ward, bed }) => (
+                    <li key={bed.id}>
+                      <Link to={`/resident/ward/${ward.id}?bed=${bed.index}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-semibold text-ink">{bed.patientName}</div>
+                          <div className="truncate text-[0.76rem] text-muted">
+                            {ward.name} · {UNITS[ward.unit].one} {bedLabel(bed)}
+                            {bed.doctorName && ` · ${bed.doctorName}`}
+                          </div>
+                        </div>
+                        <StatusTag status={bed.status} />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
         </div>
-      </section>
 
-      {/* أدوات المدير */}
-      <section className="mb-6">
-        <h2 className="section-title mb-2.5 flex items-center gap-2">
-          <Settings2 size={18} className="text-brand" />
-          {isAdmin ? 'أدوات الإدارة' : 'السجلات والحساب'}
-        </h2>
-        <div className="grid gap-2.5 sm:grid-cols-2">
+        <div className="space-y-6">
+          <section>
+            <SectionHeader title="التعاميم والتبليغات" />
+            <div className="space-y-2">
+              {announcements.length === 0 ? (
+                <div className="panel">
+                  <EmptyState title="لا توجد تبليغات">{isAdmin ? 'أرسل تبليغاً يظهر فوراً لجميع الكادر.' : 'تظهر هنا تبليغات الإدارة فور نشرها.'}</EmptyState>
+                </div>
+              ) : (
+                announcements.slice(0, 6).map((a) => {
+                  const lv = LEVELS[a.level]
+                  const at = a.createdAt?.toDate()
+                  return (
+                    <article key={a.id} className={`panel border-s-[3px] px-4 py-3 ${lv.bar}`}>
+                      <div className="flex items-start gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-bold text-ink">{a.title}</h3>
+                            {a.level !== 'normal' && <span className={`tag ${lv.cls}`}>{lv.label}</span>}
+                          </div>
+                          {a.body && <p className="mt-1 whitespace-pre-line text-[0.9rem] leading-relaxed text-ink-2">{a.body}</p>}
+                          <div className="mt-1.5 text-[0.74rem] text-muted">
+                            {a.author}
+                            {at && ` · ${timeAgo(at)}`}
+                          </div>
+                        </div>
+                        {isAdmin && (
+                          <button type="button" className="btn btn-ghost btn-sm btn-icon -me-2 text-faint hover:text-critical" onClick={() => removeAnnouncement(a.id, a.title)} aria-label="حذف التبليغ">
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  )
+                })
+              )}
+            </div>
+          </section>
+
+          <section>
+            <SectionHeader
+              title="آخر النشاطات"
+              actions={
+                <Link to="/admin/activity" className="text-[0.82rem] font-semibold text-brand-ink hover:underline">
+                  عرض الكل
+                </Link>
+              }
+            />
+            <div className="panel overflow-hidden">
+              {activity.length === 0 ? <EmptyState title="لا توجد نشاطات بعد" /> : <ActivityList list={activity} />}
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <section className="mt-6">
+        <SectionHeader title={isAdmin ? 'الإعدادات والسجلات' : 'السجلات والحساب'} />
+        <div className="panel divide-y divide-line overflow-hidden">
           {isAdmin && (
             <>
-              <ToolButton icon={<Settings2 size={20} />} title="إعدادات الردهات والخفارة" sub="عدد الردهات والغرف والأسرّة ووقت بدء الخفارة" onClick={() => setSettingsOpen(true)} />
-              <ToolButton icon={<ListChecks size={20} />} title="مناصب جدول الخفارات" sub="تعديل أعمدة جدول الكولات" onClick={() => setPositionsOpen(true)} />
-              <ToolLink icon={<BookUser size={20} />} title="إدارة دليل الهواتف" sub="إضافة وتعديل أرقام الكادر" to="/staff/directory" />
+              <ToolRow title="الردهات" sub={`${wards.length} ردهات — إضافة وتعديل الأسماء والأعداد والعلامات الحيوية`} to="/admin/wards" />
+              <ToolRow title="أقسام الكادر الطبي" sub={`${settings.departments.length} أقسام`} to="/admin/departments" />
+              <ToolRow title="مناصب جدول الخفارات" sub={settings.positions.map((p) => p.label).join('، ')} onClick={() => setPositionsOpen(true)} />
+              <ToolRow title="وقت بدء الخفارة" sub="الخفارة ٢٤ ساعة" onClick={() => setSettingsOpen(true)} />
+              <ToolRow title="دليل الهواتف" sub={`${contacts.length} جهة اتصال`} to="/staff/directory" />
             </>
           )}
-          <ToolButton icon={<Archive size={20} />} title="سجل المرضى المُخرَجين" sub="آخر ١٠٠ مريض تم إخراجهم" onClick={() => setArchiveOpen(true)} />
-          <ToolButton icon={<KeyRound size={20} />} title="تغيير كلمة المرور" sub={`حساب ${role ? ROLE_LABEL[role] : ''}`} onClick={() => setPwOpen(true)} />
-          <ToolButton
-            icon={<LogOut size={20} />}
+          <ToolRow title="سجل المرضى المُخرَجين" sub="البحث في المرضى الذين غادروا المستشفى" to="/admin/archive" />
+          <ToolRow title="سجل النشاطات" sub="كل التعديلات مع الوقت واسم من قام بها" to="/admin/activity" />
+          <ToolRow title="تغيير كلمة المرور" sub={role === 'admin' ? 'حساب الإدارة' : 'حساب الكادر الطبي'} onClick={() => setPwOpen(true)} />
+          <ToolRow
             title="تسجيل الخروج"
-            sub="الخروج من هذا الجهاز"
             danger
             onClick={async () => {
               if (await confirm({ title: 'تسجيل الخروج', message: 'هل تريد تسجيل الخروج؟', confirmLabel: 'خروج', danger: true })) await logout()
@@ -205,35 +270,10 @@ export function AdminPage() {
       </section>
 
       <AnnouncementSheet open={annOpen} onClose={() => setAnnOpen(false)} />
-      <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <ShiftStartSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <PositionsSheet open={positionsOpen} onClose={() => setPositionsOpen(false)} />
-      <ArchiveSheet open={archiveOpen} onClose={() => setArchiveOpen(false)} />
       <ChangePasswordSheet open={pwOpen} onClose={() => setPwOpen(false)} />
     </div>
-  )
-}
-
-function ToolButton({ icon, title, sub, onClick, danger }: { icon: ReactNode; title: string; sub: string; onClick: () => void; danger?: boolean }) {
-  return (
-    <button type="button" onClick={onClick} className="card flex items-center gap-3 p-3.5 text-start transition hover:shadow-card">
-      <span className={`grid size-11 shrink-0 place-items-center rounded-xl ${danger ? 'bg-accent-soft text-accent' : 'bg-brand-soft text-brand-ink'}`}>{icon}</span>
-      <span className="min-w-0">
-        <span className={`block font-bold ${danger ? 'text-accent' : 'text-ink'}`}>{title}</span>
-        <span className="block truncate text-[0.8rem] text-muted">{sub}</span>
-      </span>
-    </button>
-  )
-}
-
-function ToolLink({ icon, title, sub, to }: { icon: ReactNode; title: string; sub: string; to: string }) {
-  return (
-    <Link to={to} className="card flex items-center gap-3 p-3.5 transition hover:shadow-card">
-      <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand-ink">{icon}</span>
-      <span className="min-w-0">
-        <span className="block font-bold text-ink">{title}</span>
-        <span className="block truncate text-[0.8rem] text-muted">{sub}</span>
-      </span>
-    </Link>
   )
 }
 
@@ -261,8 +301,18 @@ function AnnouncementSheet({ open, onClose }: { open: boolean; onClose: () => vo
   }
 
   return (
-    <Sheet open={open} onClose={onClose} title="تبليغ جديد" subtitle="يظهر فوراً على أجهزة جميع الكادر">
-      <form onSubmit={submit} className="space-y-4 pb-2">
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title="تبليغ جديد"
+      subtitle="يظهر فوراً على أجهزة جميع الكادر"
+      footer={
+        <button type="submit" form="ann-form" className="btn btn-primary" disabled={!title.trim()}>
+          نشر التبليغ
+        </button>
+      }
+    >
+      <form id="ann-form" onSubmit={submit} className="space-y-4">
         <Field label="العنوان">
           <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} required autoFocus />
         </Field>
@@ -277,68 +327,61 @@ function AnnouncementSheet({ open, onClose }: { open: boolean; onClose: () => vo
             options={(Object.keys(LEVELS) as AnnouncementLevel[]).map((k) => ({ value: k, label: LEVELS[k].label }))}
           />
         </div>
-        <button type="submit" className="btn btn-primary w-full" disabled={!title.trim()}>
-          <Megaphone size={18} />
-          نشر التبليغ
+      </form>
+    </Sheet>
+  )
+}
+
+function ShiftStartSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { settings } = useData()
+  const toast = useToast()
+  const [value, setValue] = useState(settings.shiftStart)
+  useEffect(() => {
+    if (open) setValue(settings.shiftStart)
+  }, [open, settings.shiftStart])
+  return (
+    <Sheet open={open} onClose={onClose} size="sm" title="وقت بدء الخفارة" subtitle="تُحسب «خفارة اليوم» ابتداءً من هذا الوقت ولمدة ٢٤ ساعة">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          saveSettings({ shiftStart: value || '08:00' }).catch(() => toast('تعذّر الحفظ', 'error'))
+          toast('تم الحفظ')
+          onClose()
+        }}
+        className="space-y-4"
+      >
+        <input className="input" type="time" value={value} onChange={(e) => setValue(e.target.value)} />
+        <button type="submit" className="btn btn-primary w-full">
+          حفظ
         </button>
       </form>
     </Sheet>
   )
 }
 
-function SettingsSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { settings } = useData()
-  const toast = useToast()
-  const [form, setForm] = useState({ wardCount: 20, defaultRooms: 20, defaultBeds: 10, shiftStart: '08:00' })
-
-  useEffect(() => {
-    if (open)
-      setForm({
-        wardCount: settings.wardCount,
-        defaultRooms: settings.defaultRooms,
-        defaultBeds: settings.defaultBeds,
-        shiftStart: settings.shiftStart,
-      })
-  }, [open, settings])
-
-  const clamp = (v: number) => Math.max(1, Math.min(60, Math.floor(v) || 1))
-
-  const submit = (e: FormEvent) => {
-    e.preventDefault()
-    saveSettings({
-      wardCount: clamp(form.wardCount),
-      defaultRooms: clamp(form.defaultRooms),
-      defaultBeds: clamp(form.defaultBeds),
-      shiftStart: form.shiftStart || '08:00',
-    }).catch(() => toast('تعذّر حفظ الإعدادات', 'error'))
-    toast('تم حفظ الإعدادات')
-    onClose()
-  }
-
+/** محرّر قائمة مرتّبة بسيطة (للمناصب والأقسام) */
+export function ListRowControls({ index, length, onMove, onDelete }: { index: number; length: number; onMove: (d: number) => void; onDelete: () => void }): ReactNode {
   return (
-    <Sheet open={open} onClose={onClose} title="إعدادات الردهات والخفارة">
-      <form onSubmit={submit} className="space-y-4 pb-2">
-        <Field label="عدد الردهات" hint="الافتراضي ٢٠ ردهة">
-          <input className="input tabular-nums" type="number" min={1} max={60} inputMode="numeric" value={form.wardCount} onChange={(e) => setForm({ ...form, wardCount: Number(e.target.value) })} />
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label={`${SECTIONS.rooms.letter}: عدد الغرف الافتراضي`}>
-            <input className="input tabular-nums" type="number" min={1} max={60} inputMode="numeric" value={form.defaultRooms} onChange={(e) => setForm({ ...form, defaultRooms: Number(e.target.value) })} />
-          </Field>
-          <Field label={`${SECTIONS.icu.letter}: عدد الأسرّة الافتراضي`}>
-            <input className="input tabular-nums" type="number" min={1} max={60} inputMode="numeric" value={form.defaultBeds} onChange={(e) => setForm({ ...form, defaultBeds: Number(e.target.value) })} />
-          </Field>
-        </div>
-        <p className="-mt-2 text-[0.78rem] text-muted">يمكن تخصيص عدد الغرف والأسرّة لكل ردهة على حدة من زر التعديل ✎ على الردهة.</p>
-        <Field label="وقت بدء الخفارة (٢٤ ساعة)">
-          <input className="input" type="time" value={form.shiftStart} onChange={(e) => setForm({ ...form, shiftStart: e.target.value })} />
-        </Field>
-        <button type="submit" className="btn btn-primary w-full">
-          حفظ الإعدادات
-        </button>
-      </form>
-    </Sheet>
+    <div className="flex shrink-0">
+      <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={() => onMove(-1)} disabled={index === 0} aria-label="تحريك للأعلى">
+        ↑
+      </button>
+      <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={() => onMove(1)} disabled={index === length - 1} aria-label="تحريك للأسفل">
+        ↓
+      </button>
+      <button type="button" className="btn btn-ghost btn-sm btn-icon text-critical" onClick={onDelete} aria-label="حذف">
+        <Trash2 size={15} />
+      </button>
+    </div>
   )
+}
+
+export function moveItem<T>(list: T[], i: number, d: number): T[] {
+  const j = i + d
+  if (j < 0 || j >= list.length) return list
+  const c = [...list]
+  ;[c[i], c[j]] = [c[j], c[i]]
+  return c
 }
 
 function PositionsSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -354,19 +397,10 @@ function PositionsSheet({ open, onClose }: { open: boolean; onClose: () => void 
     }
   }, [open, settings.positions])
 
-  const move = (i: number, d: number) =>
-    setList((l) => {
-      const j = i + d
-      if (j < 0 || j >= l.length) return l
-      const c = [...l]
-      ;[c[i], c[j]] = [c[j], c[i]]
-      return c
-    })
-
   const add = () => {
     const label = newLabel.trim()
     if (!label) return
-    setList((l) => [...l, { id: `p${Date.now().toString(36)}`, label }])
+    setList((l) => [...l, { id: shortId('p'), label }])
     setNewLabel('')
   }
 
@@ -385,29 +419,21 @@ function PositionsSheet({ open, onClose }: { open: boolean; onClose: () => void 
       title="مناصب جدول الخفارات"
       subtitle="تظهر كأعمدة في جدول الكولات وفي النسخة المطبوعة"
       footer={
-        <button type="button" className="btn btn-primary w-full" onClick={save}>
+        <button type="button" className="btn btn-primary" onClick={save}>
           حفظ
         </button>
       }
     >
-      <div className="space-y-2 pb-2">
+      <div className="space-y-2">
         {list.map((p, i) => (
-          <div key={p.id} className="flex items-center gap-1.5">
-            <input className="input min-h-11 flex-1" value={p.label} onChange={(e) => setList((l) => l.map((x, k) => (k === i ? { ...x, label: e.target.value } : x)))} maxLength={40} />
-            <button type="button" className="btn btn-ghost btn-icon" onClick={() => move(i, -1)} disabled={i === 0} aria-label="تحريك للأعلى">
-              <ArrowUp size={17} />
-            </button>
-            <button type="button" className="btn btn-ghost btn-icon" onClick={() => move(i, 1)} disabled={i === list.length - 1} aria-label="تحريك للأسفل">
-              <ArrowDown size={17} />
-            </button>
-            <button type="button" className="btn btn-ghost btn-icon text-accent" onClick={() => setList((l) => l.filter((_, k) => k !== i))} aria-label="حذف">
-              <Trash2 size={17} />
-            </button>
+          <div key={p.id} className="flex items-center gap-1">
+            <input className="input flex-1" value={p.label} onChange={(e) => setList((l) => l.map((x, k) => (k === i ? { ...x, label: e.target.value } : x)))} maxLength={40} />
+            <ListRowControls index={i} length={list.length} onMove={(d) => setList((l) => moveItem(l, i, d))} onDelete={() => setList((l) => l.filter((_, k) => k !== i))} />
           </div>
         ))}
         <div className="flex gap-2 pt-2">
           <input
-            className="input min-h-11 flex-1"
+            className="input flex-1"
             placeholder="منصب جديد، مثال: طبيب الأطفال الخافر"
             value={newLabel}
             onChange={(e) => setNewLabel(e.target.value)}
@@ -419,72 +445,11 @@ function PositionsSheet({ open, onClose }: { open: boolean; onClose: () => void 
             }}
             maxLength={40}
           />
-          <button type="button" className="btn btn-soft" onClick={add}>
-            <Plus size={17} />
+          <button type="button" className="btn btn-secondary" onClick={add}>
             إضافة
           </button>
         </div>
       </div>
-    </Sheet>
-  )
-}
-
-function ArchiveSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { isAdmin } = useAuth()
-  const { list, loading } = useArchive(open)
-  const confirm = useConfirm()
-  const toast = useToast()
-  const [q, setQ] = useState('')
-  const needle = q.trim()
-  const filtered = needle ? list.filter((p) => [p.patientName, p.doctorName, p.operation].some((f) => f.includes(needle))) : list
-
-  return (
-    <Sheet open={open} onClose={onClose} size="lg" title="سجل المرضى المُخرَجين" subtitle="آخر ١٠٠ عملية إخراج">
-      <div className="relative mb-3">
-        <Search size={17} className="pointer-events-none absolute inset-y-0 start-3 my-auto text-muted" />
-        <input className="input min-h-10 ps-9" placeholder="بحث بالاسم أو الطبيب…" value={q} onChange={(e) => setQ(e.target.value)} />
-      </div>
-      {loading ? (
-        <div className="py-10 text-center text-muted">جارٍ التحميل…</div>
-      ) : filtered.length === 0 ? (
-        <EmptyState icon={<Archive size={26} />} title="السجل فارغ">
-          يُضاف المريض إلى السجل عند الضغط على «إخراج المريض» من بطاقته.
-        </EmptyState>
-      ) : (
-        <div className="space-y-2 pb-3">
-          {filtered.map((p) => {
-            const at = p.dischargedAt?.toDate?.()
-            return (
-              <div key={p.id} className="rounded-2xl border border-line bg-surface-2 p-3">
-                <div className="flex items-start gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="font-bold text-ink">{p.patientName}</div>
-                    <div className="text-[0.8rem] text-muted">
-                      ردهة {p.wardNumber} — {SECTIONS[p.section].unit} {p.roomNo || twoDigits(p.index)}
-                      {p.doctorName && ` • ${p.doctorName}`}
-                      {p.operation && ` • ${p.operation}`}
-                    </div>
-                    {at && <div className="mt-0.5 text-[0.75rem] text-muted">أُخرج في {dateTime(at)}</div>}
-                  </div>
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-icon text-muted hover:text-accent"
-                      aria-label="حذف من السجل"
-                      onClick={async () => {
-                        if (await confirm({ title: 'حذف من السجل', message: `حذف سجل «${p.patientName}» نهائياً؟`, confirmLabel: 'حذف', danger: true }))
-                          deleteArchived(p.id).catch(() => toast('تعذّر الحذف', 'error'))
-                      }}
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
     </Sheet>
   )
 }

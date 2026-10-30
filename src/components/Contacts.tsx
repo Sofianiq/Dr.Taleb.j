@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Pencil, Phone, Plus, Trash2, UserPlus } from 'lucide-react'
+import { Phone } from 'lucide-react'
 import { addContact, deleteContact, updateContact, type ContactInput } from '../data/actions'
-import { useAuth } from '../data/auth'
+import { useData } from '../data/store'
 import type { Contact } from '../data/types'
-import { CONTACT_GROUPS, CONTACT_ROLES, groupLabel } from '../lib/constants'
+import { CONTACT_ROLES, contactGroups, groupLabel } from '../lib/constants'
 import { formatPhone, isValidPhone, normalizePhone, telUrl, whatsappUrl } from '../lib/phone'
 import { Field, Sheet, useConfirm, useToast } from './ui'
 
@@ -20,40 +20,34 @@ function initials(name: string) {
   return (parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')
 }
 
-const AVATAR_TONES = [
-  'bg-brand-soft text-brand-ink',
-  'bg-info-soft text-info',
-  'bg-coral-soft text-coral',
-  'bg-accent-soft text-accent',
-  'bg-warn-soft text-warn',
-]
-
-export function ContactCard({ contact, onEdit, showGroup = true }: { contact: Contact; onEdit?: () => void; showGroup?: boolean }) {
-  const tone = AVATAR_TONES[[...contact.name].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_TONES.length]
-  return (
-    <div className="card flex items-center gap-3 p-3">
-      <div className={`grid size-12 shrink-0 place-items-center rounded-2xl font-display text-[1rem] font-bold ${tone}`}>
-        {initials(contact.name) || '؟'}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span className="truncate font-bold text-ink">{contact.name}</span>
-          {onEdit && (
-            <button type="button" onClick={onEdit} className="grid size-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-3 hover:text-brand" aria-label={`تعديل ${contact.name}`}>
-              <Pencil size={14} />
-            </button>
-          )}
-        </div>
-        <div className="truncate text-[0.8rem] text-muted">
-          {[contact.role, showGroup ? groupLabel(contact.dept) : '', contact.note].filter(Boolean).join(' • ')}
-        </div>
-        <div className="text-[0.8rem] font-medium text-ink-2 tabular-nums" dir="ltr" style={{ textAlign: 'right' }}>
+/** صف جهة اتصال: الاسم والصفة والرقم مع زرّي الاتصال وواتساب */
+export function ContactRow({ contact, onEdit, showGroup = true }: { contact: Contact; onEdit?: () => void; showGroup?: boolean }) {
+  const { settings } = useData()
+  const sub = [contact.role, showGroup ? groupLabel(contact.dept, settings.departments) : '', contact.note].filter(Boolean).join(' · ')
+  const main = (
+    <>
+      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-surface-3 text-[0.82rem] font-bold text-ink-2">{initials(contact.name) || '؟'}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-semibold text-ink">{contact.name}</span>
+        <span className="block truncate text-[0.78rem] text-muted">{sub}</span>
+        <span className="block text-[0.8rem] text-ink-2 tabular-nums" dir="ltr" style={{ textAlign: 'right' }}>
           {formatPhone(contact.phone)}
-        </div>
-      </div>
+        </span>
+      </span>
+    </>
+  )
+  return (
+    <div className="flex items-center gap-3 px-4 py-3">
+      {onEdit ? (
+        <button type="button" onClick={onEdit} className="flex min-w-0 flex-1 items-center gap-3 text-start" aria-label={`تعديل ${contact.name}`}>
+          {main}
+        </button>
+      ) : (
+        <div className="flex min-w-0 flex-1 items-center gap-3">{main}</div>
+      )}
       <div className="flex shrink-0 gap-1.5">
         <a href={telUrl(contact.phone)} className="btn btn-secondary btn-icon" aria-label={`اتصال بـ ${contact.name}`}>
-          <Phone size={18} />
+          <Phone size={17} />
         </a>
         <a
           href={whatsappUrl(contact.phone)}
@@ -62,7 +56,7 @@ export function ContactCard({ contact, onEdit, showGroup = true }: { contact: Co
           className="btn btn-wa btn-icon"
           aria-label={`مراسلة ${contact.name} عبر واتساب`}
         >
-          <WhatsAppIcon size={20} />
+          <WhatsAppIcon size={19} />
         </a>
       </div>
     </div>
@@ -82,6 +76,7 @@ export function ContactEditor({
   contact?: Contact | null
   defaultDept?: string
 }) {
+  const { settings } = useData()
   const toast = useToast()
   const confirm = useConfirm()
   const [form, setForm] = useState<ContactInput>(EMPTY)
@@ -126,26 +121,28 @@ export function ContactEditor({
       title={contact ? 'تعديل جهة اتصال' : 'إضافة جهة اتصال'}
       subtitle="للتواصل المباشر عبر واتساب أو الاتصال الهاتفي"
       footer={
-        <div className="flex gap-2.5">
-          <button type="submit" form="contact-form" className="btn btn-primary flex-1">
-            {contact ? <Pencil size={18} /> : <UserPlus size={18} />}
+        <div className="flex items-center gap-2">
+          <button type="submit" form="contact-form" className="btn btn-primary">
             {contact ? 'حفظ التعديلات' : 'إضافة'}
           </button>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            إلغاء
+          </button>
+          <span className="flex-1" />
           {contact && (
-            <button type="button" className="btn btn-danger" onClick={remove}>
-              <Trash2 size={18} />
+            <button type="button" className="btn btn-danger btn-sm" onClick={remove}>
               حذف
             </button>
           )}
         </div>
       }
     >
-      <form id="contact-form" onSubmit={submit} className="space-y-4 pb-2">
+      <form id="contact-form" onSubmit={submit} className="space-y-4">
         <Field label="الاسم الكامل">
           <input className="input" value={form.name} onChange={set('name')} maxLength={120} placeholder="مثال: د. أحمد محمد" autoFocus={!contact} />
         </Field>
         <Field label="رقم الهاتف (واتساب)" hint="يمكن كتابته بالصيغة المحلية مثل 07701234567">
-          <input className="input input-ltr tabular-nums" type="tel" inputMode="tel" value={form.phone} onChange={set('phone')} maxLength={30} placeholder="07xx xxx xxxx" />
+          <input className="input ltr-input tabular-nums" type="tel" inputMode="tel" value={form.phone} onChange={set('phone')} maxLength={30} placeholder="07xx xxx xxxx" />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="الصفة">
@@ -157,7 +154,7 @@ export function ContactEditor({
           </Field>
           <Field label="القسم">
             <select className="input" value={form.dept} onChange={set('dept')}>
-              {CONTACT_GROUPS.map((g) => (
+              {contactGroups(settings.departments).map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.label}
                 </option>
@@ -168,24 +165,8 @@ export function ContactEditor({
         <Field label="الاختصاص / ملاحظة (اختياري)">
           <input className="input" value={form.note} onChange={set('note')} maxLength={300} placeholder="مثال: اختصاص جراحة عامة" />
         </Field>
-        {error && <div className="rounded-xl bg-accent-soft px-3.5 py-2.5 text-[0.88rem] font-medium text-accent">{error}</div>}
+        {error && <div className="rounded-md border border-critical/25 bg-critical-soft px-3 py-2 text-[0.86rem] text-critical">{error}</div>}
       </form>
     </Sheet>
-  )
-}
-
-/** زر إضافة عائم للمدير */
-export function AddContactFab({ onClick }: { onClick: () => void }) {
-  const { isAdmin } = useAuth()
-  if (!isAdmin) return null
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="btn btn-primary fixed bottom-[calc(5.6rem+env(safe-area-inset-bottom))] end-4 z-30 h-14 rounded-2xl px-5 shadow-float sm:end-[max(1rem,calc(50vw-30rem))]"
-    >
-      <Plus size={20} />
-      إضافة رقم
-    </button>
   )
 }

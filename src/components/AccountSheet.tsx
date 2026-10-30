@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { Download, Eye, EyeOff, KeyRound, LogOut, Monitor, Moon, ShieldCheck, Share, SquarePlus, Sun } from 'lucide-react'
+import { ChevronLeft, Download, Eye, EyeOff, KeyRound, LogOut, Share, SquarePlus } from 'lucide-react'
 import { changePassword, logout } from '../lib/auth'
 import { ACCOUNTS, ROLE_LABEL } from '../lib/constants'
+import { setOperatorName, useOperatorName } from '../lib/operator'
 import { usePwa } from '../lib/pwa'
 import type { Role } from '../data/types'
 import { Field, Segmented, Sheet, Spinner, useConfirm, useToast } from './ui'
@@ -23,12 +24,32 @@ export function applyStoredTheme() {
   else document.documentElement.dataset.theme = t
 }
 
+function Row({ icon, label, hint, onClick, danger }: { icon: ReactNode; label: string; hint?: string; onClick: () => void; danger?: boolean }) {
+  return (
+    <button type="button" onClick={onClick} className="flex w-full items-center gap-3 px-4 py-3 text-start hover:bg-surface-2">
+      <span className={danger ? 'text-critical' : 'text-muted'}>{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className={`block text-[0.92rem] font-semibold ${danger ? 'text-critical' : 'text-ink'}`}>{label}</span>
+        {hint && <span className="block text-[0.78rem] text-muted">{hint}</span>}
+      </span>
+      {!danger && <ChevronLeft size={16} className="text-faint" />}
+    </button>
+  )
+}
+
 export function AccountSheet({ open, onClose, role }: { open: boolean; onClose: () => void; role: Role | null }) {
   const [pwOpen, setPwOpen] = useState(false)
   const [installOpen, setInstallOpen] = useState(false)
   const [theme, setTheme] = useState<Theme>(readTheme)
+  const operator = useOperatorName()
+  const [name, setName] = useState(operator)
   const pwa = usePwa()
   const confirm = useConfirm()
+  const toast = useToast()
+
+  useEffect(() => {
+    if (open) setName(operator)
+  }, [open, operator])
 
   useEffect(() => {
     try {
@@ -50,61 +71,67 @@ export function AccountSheet({ open, onClose, role }: { open: boolean; onClose: 
 
   return (
     <>
-      <Sheet open={open} onClose={onClose} title="الحساب والإعدادات">
+      <Sheet open={open} onClose={onClose} title="الحساب والإعدادات" size="sm">
         {role && (
-          <div className="mb-4 flex items-center gap-3 rounded-2xl bg-brand-soft p-4">
-            <div className="grid size-12 place-items-center rounded-2xl bg-brand text-on-brand">
-              <ShieldCheck size={24} />
+          <div className="mb-4 rounded-lg border border-line bg-surface-2 px-4 py-3">
+            <div className="text-[0.78rem] text-muted">الحساب</div>
+            <div className="font-bold text-ink">{ROLE_LABEL[role]}</div>
+            <div className="text-[0.84rem] text-ink-2" dir="ltr" style={{ textAlign: 'right' }}>
+              {ACCOUNTS[role].email}
             </div>
-            <div className="min-w-0">
-              <div className="font-display font-bold text-brand-ink">{ROLE_LABEL[role]}</div>
-              <div className="truncate text-[0.85rem] text-ink-2" dir="ltr">
-                {ACCOUNTS[role].email}
-              </div>
-              <div className="text-[0.78rem] text-muted">
-                {role === 'admin' ? 'صلاحيات كاملة على جميع أقسام التطبيق' : 'تعبئة استمارات المرضى والاطلاع على جميع الأقسام'}
-              </div>
+            <div className="mt-1 text-[0.78rem] text-muted">
+              {role === 'admin' ? 'صلاحيات كاملة على جميع أقسام التطبيق وإعداداته' : 'إدخال المرضى ومتابعتهم والاطلاع على جميع الأقسام'}
             </div>
           </div>
         )}
 
-        <div className="space-y-2">
-          <button type="button" className="btn btn-secondary w-full justify-start" onClick={() => setPwOpen(true)}>
-            <KeyRound size={19} className="text-brand" />
-            تغيير كلمة المرور
-          </button>
-          {!pwa.isStandalone && (
-            <button
-              type="button"
-              className="btn btn-secondary w-full justify-start"
-              onClick={async () => {
-                if (pwa.canInstall) await pwa.install()
-                else setInstallOpen(true)
-              }}
-            >
-              <Download size={19} className="text-brand" />
-              تثبيت التطبيق على الهاتف
-            </button>
-          )}
-        </div>
+        <form
+          className="mb-4"
+          onSubmit={(e) => {
+            e.preventDefault()
+            setOperatorName(name)
+            toast('تم حفظ اسم مستخدم الجهاز')
+          }}
+        >
+          <Field label="اسم مستخدم هذا الجهاز" hint="يُسجَّل مع كل تعديل في سجل النشاطات">
+            <div className="flex gap-2">
+              <input className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="مثال: د. حسن علي" />
+              <button type="submit" className="btn btn-secondary shrink-0" disabled={name.trim() === operator}>
+                حفظ
+              </button>
+            </div>
+          </Field>
+        </form>
 
-        <div className="mt-5">
+        <div className="mb-4">
           <div className="field-label">المظهر</div>
           <Segmented<Theme>
             value={theme}
             onChange={setTheme}
+            className="w-full"
             options={[
-              { value: 'auto', label: <><Monitor size={16} /> تلقائي</> },
-              { value: 'light', label: <><Sun size={16} /> فاتح</> },
-              { value: 'dark', label: <><Moon size={16} /> داكن</> },
+              { value: 'auto', label: 'تلقائي' },
+              { value: 'light', label: 'فاتح' },
+              { value: 'dark', label: 'داكن' },
             ]}
           />
         </div>
 
-        <button type="button" className="btn btn-danger mt-6 w-full" onClick={doLogout}>
-          <LogOut size={19} />
-          تسجيل الخروج
-        </button>
+        <div className="-mx-5 divide-y divide-line border-y border-line">
+          <Row icon={<KeyRound size={18} />} label="تغيير كلمة المرور" hint="تُطبَّق على جميع أجهزة هذا الحساب" onClick={() => setPwOpen(true)} />
+          {!pwa.isStandalone && (
+            <Row
+              icon={<Download size={18} />}
+              label="تثبيت التطبيق على الهاتف"
+              hint="يعمل كتطبيق مستقل وحتى دون إنترنت"
+              onClick={async () => {
+                if (pwa.canInstall) await pwa.install()
+                else setInstallOpen(true)
+              }}
+            />
+          )}
+          <Row icon={<LogOut size={18} />} label="تسجيل الخروج" onClick={doLogout} danger />
+        </div>
       </Sheet>
 
       <ChangePasswordSheet open={pwOpen} onClose={() => setPwOpen(false)} />
@@ -113,22 +140,25 @@ export function AccountSheet({ open, onClose, role }: { open: boolean; onClose: 
   )
 }
 
-function PasswordInput({
+export function PasswordInput({
   value,
   onChange,
   autoComplete,
   autoFocus,
+  id,
 }: {
   value: string
   onChange: (v: string) => void
   autoComplete: string
   autoFocus?: boolean
+  id?: string
 }) {
   const [show, setShow] = useState(false)
   return (
     <div className="relative">
       <input
-        className="input input-ltr pe-12"
+        id={id}
+        className="input ltr-input pe-11"
         type={show ? 'text' : 'password'}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -138,17 +168,15 @@ function PasswordInput({
       />
       <button
         type="button"
-        className="absolute inset-y-0 end-1 my-auto grid size-10 place-items-center rounded-xl text-muted hover:text-ink"
+        className="absolute inset-y-0 end-0.5 my-auto grid size-9 place-items-center rounded-md text-muted hover:text-ink"
         onClick={() => setShow((s) => !s)}
         aria-label={show ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
       >
-        {show ? <EyeOff size={18} /> : <Eye size={18} />}
+        {show ? <EyeOff size={17} /> : <Eye size={17} />}
       </button>
     </div>
   )
 }
-
-export { PasswordInput }
 
 export function ChangePasswordSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [current, setCurrent] = useState('')
@@ -185,13 +213,8 @@ export function ChangePasswordSheet({ open, onClose }: { open: boolean; onClose:
   }
 
   return (
-    <Sheet
-      open={open}
-      onClose={onClose}
-      title="تغيير كلمة المرور"
-      subtitle="ستُطبَّق كلمة المرور الجديدة على جميع الأجهزة التي تستخدم هذا الحساب"
-    >
-      <form onSubmit={submit} className="space-y-4 pb-2">
+    <Sheet open={open} onClose={onClose} size="sm" title="تغيير كلمة المرور" subtitle="ستُطبَّق كلمة المرور الجديدة على جميع الأجهزة التي تستخدم هذا الحساب">
+      <form onSubmit={submit} className="space-y-4">
         <Field label="كلمة المرور الحالية">
           <PasswordInput value={current} onChange={setCurrent} autoComplete="current-password" autoFocus />
         </Field>
@@ -201,9 +224,9 @@ export function ChangePasswordSheet({ open, onClose }: { open: boolean; onClose:
         <Field label="تأكيد كلمة المرور الجديدة">
           <PasswordInput value={again} onChange={setAgain} autoComplete="new-password" />
         </Field>
-        {error && <div className="rounded-xl bg-accent-soft px-3.5 py-2.5 text-[0.88rem] font-medium text-accent">{error}</div>}
+        {error && <div className="rounded-md border border-critical/25 bg-critical-soft px-3 py-2 text-[0.86rem] text-critical">{error}</div>}
         <button type="submit" className="btn btn-primary w-full" disabled={busy || !current || !next || !again}>
-          {busy ? <Spinner size={18} /> : <KeyRound size={18} />}
+          {busy && <Spinner size={16} />}
           حفظ كلمة المرور الجديدة
         </button>
       </form>
@@ -213,41 +236,36 @@ export function ChangePasswordSheet({ open, onClose }: { open: boolean; onClose:
 
 export function InstallGuideSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { isIOS } = usePwa()
+  const steps = isIOS
+    ? [
+        <>افتح التطبيق من متصفح <b>Safari</b>.</>,
+        <>
+          اضغط زر المشاركة <Share size={15} className="inline align-[-2px]" /> في أسفل الشاشة.
+        </>,
+        <>
+          اختر <b>«إضافة إلى الشاشة الرئيسية»</b> <SquarePlus size={15} className="inline align-[-2px]" /> ثم «إضافة».
+        </>,
+      ]
+    : [
+        <>افتح التطبيق من متصفح <b>Chrome</b>.</>,
+        <>اضغط قائمة المتصفح (⋮) في الأعلى.</>,
+        <>
+          اختر <b>«تثبيت التطبيق»</b> أو <b>«إضافة إلى الشاشة الرئيسية»</b>.
+        </>,
+      ]
   return (
-    <Sheet open={open} onClose={onClose} title="تثبيت التطبيق على الهاتف" subtitle="يعمل كتطبيق مستقل بأيقونة على الشاشة الرئيسية">
-      <div className="space-y-4 pb-3 text-[0.93rem] leading-relaxed text-ink-2">
-        {isIOS ? (
-          <ol className="space-y-3">
-            <Step n={1}>افتح التطبيق من متصفح <b>Safari</b>.</Step>
-            <Step n={2}>
-              اضغط زر المشاركة <Share size={17} className="inline align-[-3px] text-info" /> في أسفل الشاشة.
-            </Step>
-            <Step n={3}>
-              اختر <b>«إضافة إلى الشاشة الرئيسية»</b> <SquarePlus size={17} className="inline align-[-3px]" /> ثم اضغط «إضافة».
-            </Step>
-          </ol>
-        ) : (
-          <ol className="space-y-3">
-            <Step n={1}>افتح التطبيق من متصفح <b>Chrome</b>.</Step>
-            <Step n={2}>اضغط قائمة المتصفح (⋮) في الأعلى.</Step>
-            <Step n={3}>
-              اختر <b>«تثبيت التطبيق»</b> أو <b>«إضافة إلى الشاشة الرئيسية»</b>.
-            </Step>
-          </ol>
-        )}
-        <p className="rounded-xl bg-surface-3 px-3.5 py-2.5 text-[0.85rem] text-muted">
-          بعد التثبيت يفتح التطبيق بملء الشاشة، ويعمل حتى عند ضعف الإنترنت، وتتم مزامنة التغييرات تلقائياً.
-        </p>
-      </div>
+    <Sheet open={open} onClose={onClose} size="sm" title="تثبيت التطبيق على الهاتف" subtitle={isIOS ? 'iPhone / iPad' : 'Android'}>
+      <ol className="space-y-3 text-[0.92rem] text-ink-2">
+        {steps.map((s, i) => (
+          <li key={i} className="flex items-start gap-3">
+            <span className="grid size-6 shrink-0 place-items-center rounded-full border border-line-strong text-[0.78rem] font-bold text-ink">{i + 1}</span>
+            <span className="pt-0.5">{s}</span>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-4 rounded-md bg-surface-2 px-3 py-2 text-[0.82rem] text-muted">
+        بعد التثبيت يفتح التطبيق بملء الشاشة، ويعمل حتى عند ضعف الإنترنت، وتتم مزامنة التغييرات تلقائياً.
+      </p>
     </Sheet>
-  )
-}
-
-function Step({ n, children }: { n: number; children: ReactNode }) {
-  return (
-    <li className="flex items-start gap-3">
-      <span className="grid size-7 shrink-0 place-items-center rounded-full bg-brand-soft font-bold text-brand-ink">{n}</span>
-      <span className="pt-0.5">{children}</span>
-    </li>
   )
 }

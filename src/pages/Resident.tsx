@@ -1,201 +1,217 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BedDouble, CalendarClock, DoorOpen, HeartPulse, LayoutGrid, Megaphone, Pencil, Stethoscope, Users } from 'lucide-react'
-import { Field, PageHeader, Sheet, StatTile, useToast } from '../components/ui'
+import { ChevronLeft, ClipboardList, Plus, Settings2 } from 'lucide-react'
+import { PrintChoice } from '../components/PrintChoice'
+import { EmptyState, MetricStrip, PageHeader, SectionHeader, TONE_DOT } from '../components/ui'
+import { WardEditor } from '../components/WardEditor'
 import { useAuth } from '../data/auth'
-import { saveWard } from '../data/actions'
-import { isOccupied, useData } from '../data/store'
-import type { Ward } from '../data/types'
-import { currentShiftDate, longDate, prettyTime } from '../lib/dates'
-import { slotIdOf } from '../lib/ids'
+import { useCensus, useData, wardBeds } from '../data/store'
+import type { BedStatus, Ward } from '../data/types'
+import { STATUS, unitCount } from '../lib/constants'
+import { currentShiftDate, isoDate, longDate, prettyTime } from '../lib/dates'
+import { HandoverDoc } from '../print/docs'
 
-export function useWardOccupancy() {
-  const { wards, slots } = useData()
-  return useMemo(() => {
-    const map: Record<string, { rooms: number; icu: number }> = {}
-    for (const w of wards) map[w.id] = { rooms: 0, icu: 0 }
-    for (const w of wards) {
-      for (let i = 1; i <= w.rooms; i++) if (isOccupied(slots[slotIdOf(w.id, 'rooms', i)])) map[w.id].rooms++
-      for (let i = 1; i <= w.beds; i++) if (isOccupied(slots[slotIdOf(w.id, 'icu', i)])) map[w.id].icu++
-    }
-    return map
-  }, [wards, slots])
+const MAP_TONE: Record<BedStatus, string> = {
+  occupied: 'bg-brand',
+  critical: 'bg-critical',
+  discharge: 'bg-info',
+  reserved: 'bg-warn',
+  cleaning: 'bg-faint',
+  empty: 'bg-surface border border-line-strong',
+}
+
+/** خريطة مصغّرة لأسرّة الردهة ملوّنة حسب الحالة */
+function BedMap({ ward }: { ward: Ward }) {
+  const { beds } = useData()
+  return (
+    <div className="flex flex-wrap gap-[3px]" aria-hidden="true">
+      {wardBeds(ward, beds).map((b) => (
+        <span key={b.id} className={`size-3.5 rounded-[3px] ${MAP_TONE[b.status]}`} title={`${b.index} — ${STATUS[b.status].label}`} />
+      ))}
+    </div>
+  )
+}
+
+export function WardCard({ ward }: { ward: Ward }) {
+  const { byWard } = useCensus()
+  const c = byWard[ward.id]
+  const pct = c.capacity ? Math.round((c.patients / c.capacity) * 100) : 0
+  const flags: { s: BedStatus; n: number }[] = (['critical', 'discharge', 'reserved', 'cleaning'] as BedStatus[])
+    .map((s) => ({ s, n: c[s] }))
+    .filter((f) => f.n > 0)
+  return (
+    <Link to={`/resident/ward/${ward.id}`} className="panel group flex flex-col p-4 transition-colors hover:border-line-strong">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-[1.02rem] font-bold text-ink">{ward.name}</div>
+          <div className="text-[0.78rem] text-muted">{unitCount(ward.beds, ward.unit)}</div>
+        </div>
+        <ChevronLeft size={18} className="mt-1 shrink-0 text-faint transition-transform group-hover:-translate-x-0.5" />
+      </div>
+      <div className="mt-3 flex items-baseline gap-1.5">
+        <span className="text-[1.7rem] font-bold leading-none text-ink tabular-nums">{c.patients}</span>
+        <span className="text-[0.86rem] text-muted">/ {c.capacity} مريض</span>
+        <span className="ms-auto text-[0.8rem] font-semibold text-muted tabular-nums">{pct}%</span>
+      </div>
+      <div className="mt-3">
+        <BedMap ward={ward} />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 border-t border-line pt-2.5 text-[0.76rem] text-muted">
+        <span>
+          متاح: <b className="font-semibold text-ink tabular-nums">{c.empty}</b>
+        </span>
+        {flags.map((f) => (
+          <span key={f.s} className="inline-flex items-center gap-1">
+            <span className={`size-1.5 rounded-full ${TONE_DOT[STATUS[f.s].tone]}`} />
+            {STATUS[f.s].label}: <b className="font-semibold text-ink tabular-nums">{f.n}</b>
+          </span>
+        ))}
+      </div>
+    </Link>
+  )
 }
 
 export function ResidentPage() {
-  const { wards, today, settings, announcements } = useData()
+  const { wards, wardsReady, today, settings, announcements } = useData()
+  const { total } = useCensus()
   const { isAdmin } = useAuth()
-  const occupancy = useWardOccupancy()
-  const [editing, setEditing] = useState<Ward | null>(null)
-
-  const totals = useMemo(() => {
-    let rooms = 0
-    let icu = 0
-    let capacity = 0
-    for (const w of wards) {
-      rooms += occupancy[w.id]?.rooms ?? 0
-      icu += occupancy[w.id]?.icu ?? 0
-      capacity += w.rooms + w.beds
-    }
-    return { rooms, icu, capacity }
-  }, [wards, occupancy])
-
+  const [editorOpen, setEditorOpen] = useState(false)
+  const [handoverOpen, setHandoverOpen] = useState(false)
   const resident = today.assignments.resident
   const urgent = announcements.find((a) => a.level !== 'normal')
   const shiftDate = currentShiftDate(settings.shiftStart)
 
   return (
-    <div className="anim-fade-up">
-      <PageHeader title="الطبيب المقيم" subtitle="متابعة المرضى والعمليات في الردهات" icon={<Stethoscope size={22} />} />
+    <div>
+      <PageHeader
+        title="الطبيب المقيم"
+        subtitle={longDate(new Date())}
+        actions={
+          <>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setHandoverOpen(true)}>
+              <ClipboardList size={15} />
+              تقرير تسليم الشفت
+            </button>
+            {isAdmin && (
+              <Link to="/admin/wards" className="btn btn-secondary btn-sm">
+                <Settings2 size={15} />
+                إدارة الردهات
+              </Link>
+            )}
+          </>
+        }
+      />
 
-      {/* خفارة اليوم */}
-      <Link
-        to="/shifts"
-        className="relative mb-4 flex items-center gap-4 overflow-hidden rounded-[1.4rem] bg-gradient-to-l from-[#0b6a40] to-[#14935a] p-4 text-white shadow-card"
-      >
-        <div className="pattern-bg absolute inset-0 opacity-60" />
-        <div className="relative grid size-12 shrink-0 place-items-center rounded-2xl bg-white/15">
-          <CalendarClock size={24} />
+      <Link to="/shifts" className="panel mb-4 flex items-center gap-4 px-4 py-3 transition-colors hover:border-line-strong">
+        <div className="min-w-0 flex-1">
+          <div className="text-[0.76rem] font-semibold text-muted">المقيم الخافر — خفارة {longDate(shiftDate)}</div>
+          <div className={`truncate text-[1rem] font-bold ${resident ? 'text-ink' : 'text-faint'}`}>{resident || 'لم يُحدَّد بعد'}</div>
         </div>
-        <div className="relative min-w-0 flex-1">
-          <div className="text-[0.78rem] text-white/75">
-            خفارة اليوم — {longDate(shiftDate)}
-          </div>
-          <div className="truncate font-display text-[1.08rem] font-bold">
-            {resident ? `المقيم الخافر: ${resident}` : 'لم يُحدَّد المقيم الخافر بعد'}
-          </div>
-          <div className="text-[0.75rem] text-white/70">تبدأ الخفارة الساعة {prettyTime(settings.shiftStart)} ولمدة ٢٤ ساعة</div>
+        <div className="hidden text-end text-[0.76rem] text-muted sm:block">
+          تبدأ {prettyTime(settings.shiftStart)}
+          <br />
+          لمدة ٢٤ ساعة
         </div>
+        <ChevronLeft size={18} className="text-faint" />
       </Link>
 
       {urgent && (
         <Link
           to="/admin"
-          className={`mb-4 flex items-start gap-3 rounded-2xl border p-3.5 ${
-            urgent.level === 'urgent' ? 'border-accent/30 bg-accent-soft text-accent' : 'border-warn/30 bg-warn-soft text-warn'
+          className={`mb-4 block rounded-lg border border-s-[3px] px-4 py-3 ${
+            urgent.level === 'urgent' ? 'border-critical/30 border-s-critical bg-critical-soft' : 'border-warn/30 border-s-warn bg-warn-soft'
           }`}
         >
-          <Megaphone size={20} className="mt-0.5 shrink-0" />
-          <div className="min-w-0">
-            <div className="font-bold">{urgent.title}</div>
-            {urgent.body && <div className="line-clamp-2 text-[0.86rem] opacity-90">{urgent.body}</div>}
+          <div className={`text-[0.74rem] font-bold ${urgent.level === 'urgent' ? 'text-critical' : 'text-warn'}`}>
+            {urgent.level === 'urgent' ? 'تبليغ عاجل' : 'تبليغ مهم'}
           </div>
+          <div className="font-bold text-ink">{urgent.title}</div>
+          {urgent.body && <div className="line-clamp-2 text-[0.86rem] text-ink-2">{urgent.body}</div>}
         </Link>
       )}
 
-      <div className="mb-5 grid grid-cols-3 gap-2.5">
-        <StatTile label="غرف مشغولة" value={totals.rooms} icon={<DoorOpen size={20} />} />
-        <StatTile label="أسرّة الإنعاش" value={totals.icu} icon={<HeartPulse size={20} />} tone="accent" />
-        <StatTile label="إجمالي المرضى" value={totals.rooms + totals.icu} icon={<Users size={20} />} tone="info" />
+      <div className="mb-6">
+        <MetricStrip
+          items={[
+            { label: 'المرضى الحاليون', value: total.patients, hint: `من سعة ${total.capacity}` },
+            { label: 'متاح للإدخال', value: total.empty },
+            { label: 'حالات حرجة', value: total.critical, tone: total.critical ? 'critical' : undefined },
+            { label: 'جاهز للخروج', value: total.discharge, tone: total.discharge ? 'info' : undefined },
+          ]}
+        />
       </div>
 
-      <div className="mb-3 flex items-end justify-between gap-3">
-        <div>
-          <h2 className="section-title flex items-center gap-2">
-            <LayoutGrid size={19} className="text-brand" />
-            الردهات
-          </h2>
-          <p className="text-[0.82rem] text-muted">
-            {wards.length} ردهة — اضغط على الردهة لعرض الغرف والأسرّة
-            {isAdmin && '، وعلى ✎ لتعديل رقمها'}
-          </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7">
-        {wards.map((w) => {
-          const occ = occupancy[w.id] ?? { rooms: 0, icu: 0 }
-          const total = occ.rooms + occ.icu
-          const cap = w.rooms + w.beds
-          return (
-            <div key={w.id} className="relative">
-              <Link
-                to={`/resident/ward/${w.id}`}
-                className="card group relative flex aspect-square flex-col items-center justify-center overflow-hidden p-2 text-center transition hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-card active:scale-[0.98]"
-              >
-                <span className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-brand to-brand-2 opacity-80" />
-                <span className="text-[0.72rem] font-semibold text-muted">ردهة</span>
-                <span className="font-display text-[2rem] font-extrabold leading-none text-brand-ink tabular-nums sm:text-[2.3rem]" dir="auto">
-                  {w.number}
-                </span>
-                {w.name && <span className="mt-1 line-clamp-1 max-w-full px-1 text-[0.7rem] font-medium text-ink-2">{w.name}</span>}
-                <span
-                  className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.68rem] font-bold tabular-nums ${
-                    total ? 'bg-brand-soft text-brand-ink' : 'bg-surface-3 text-muted'
-                  }`}
-                >
-                  <BedDouble size={12} />
-                  {total}/{cap}
-                </span>
-              </Link>
-              {isAdmin && (
-                <button
-                  type="button"
-                  onClick={() => setEditing(w)}
-                  className="absolute end-1.5 top-2.5 grid size-8 place-items-center rounded-full bg-surface/90 text-muted shadow-soft ring-1 ring-line transition hover:text-brand"
-                  aria-label={`تعديل الردهة ${w.number}`}
-                >
-                  <Pencil size={14} />
-                </button>
-              )}
-            </div>
+      <SectionHeader
+        title="الردهات"
+        meta="اضغط على الردهة لعرض أسرّتها ومرضاها"
+        actions={
+          isAdmin && (
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditorOpen(true)}>
+              <Plus size={15} />
+              ردهة جديدة
+            </button>
           )
-        })}
+        }
+      />
+
+      {!wardsReady ? (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" aria-busy="true">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="panel h-[11.5rem] animate-pulse bg-surface-2" />
+          ))}
+        </div>
+      ) : wards.length === 0 ? (
+        <div className="panel">
+          <EmptyState title="لا توجد ردهات">{isAdmin ? 'أضف ردهة جديدة لبدء استقبال المرضى.' : 'تُضاف الردهات من قبل الإدارة.'}</EmptyState>
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {wards.map((w) => (
+            <WardCard key={w.id} ward={w} />
+          ))}
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-[0.74rem] text-muted" aria-label="دليل الألوان">
+        {(Object.keys(STATUS) as BedStatus[]).map((s) => (
+          <span key={s} className="inline-flex items-center gap-1.5">
+            <span className={`size-2.5 rounded-[2px] ${MAP_TONE[s]}`} />
+            {STATUS[s].label}
+          </span>
+        ))}
       </div>
 
-      <WardEditSheet ward={editing} onClose={() => setEditing(null)} />
+      <WardEditor open={editorOpen} onClose={() => setEditorOpen(false)} ward={null} />
+      <HandoverChoice open={handoverOpen} onClose={() => setHandoverOpen(false)} />
     </div>
   )
 }
 
-export function WardEditSheet({ ward, onClose }: { ward: Ward | null; onClose: () => void }) {
-  const toast = useToast()
-  const [number, setNumber] = useState('')
-  const [name, setName] = useState('')
-  const [rooms, setRooms] = useState(20)
-  const [beds, setBeds] = useState(10)
-
-  useEffect(() => {
-    if (ward) {
-      setNumber(ward.number)
-      setName(ward.name)
-      setRooms(ward.rooms)
-      setBeds(ward.beds)
-    }
-  }, [ward])
-
-  const submit = (e: FormEvent) => {
-    e.preventDefault()
-    if (!ward) return
-    const clamp = (v: number) => Math.max(1, Math.min(60, Math.floor(v) || 1))
-    saveWard(ward.id, { number: number.trim() || String(ward.order), name: name.trim(), rooms: clamp(rooms), beds: clamp(beds) }).catch(() =>
-      toast('تعذّر حفظ التعديل — تحقق من الصلاحيات', 'error'),
-    )
-    toast('تم حفظ بيانات الردهة')
-    onClose()
-  }
-
+/** تقرير تسليم الشفت: لكل الردهات أو لردهة محددة */
+export function HandoverChoice({ open, onClose, wardId }: { open: boolean; onClose: () => void; wardId?: string }) {
+  const { wards, beds, today } = useData()
+  const [scope, setScope] = useState<string>(wardId ?? 'all')
+  const chosen = scope === 'all' ? wards : wards.filter((w) => w.id === scope)
   return (
-    <Sheet open={!!ward} onClose={onClose} title={`تعديل الردهة ${ward?.number ?? ''}`} subtitle="يظهر التعديل فوراً لجميع المستخدمين">
-      <form onSubmit={submit} className="space-y-4 pb-2">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="رقم الردهة">
-            <input className="input text-center font-display text-lg font-bold" value={number} onChange={(e) => setNumber(e.target.value)} maxLength={10} required />
-          </Field>
-          <Field label="اسم الردهة (اختياري)">
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} placeholder="مثال: الجراحة العامة" />
-          </Field>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="عدد غرف العمليات (A)">
-            <input className="input text-center tabular-nums" type="number" inputMode="numeric" min={1} max={60} value={rooms} onChange={(e) => setRooms(Number(e.target.value))} />
-          </Field>
-          <Field label="عدد أسرّة الإنعاش (B)">
-            <input className="input text-center tabular-nums" type="number" inputMode="numeric" min={1} max={60} value={beds} onChange={(e) => setBeds(Number(e.target.value))} />
-          </Field>
-        </div>
-        <button type="submit" className="btn btn-primary w-full">حفظ</button>
-      </form>
-    </Sheet>
+    <PrintChoice
+      open={open}
+      onClose={onClose}
+      title="تقرير تسليم الشفت"
+      subtitle="قائمة المرضى الحاليين مع آخر علامات حيوية وملاحظات"
+      filename={`DrTJPH-Handover-${isoDate()}`}
+      build={() => <HandoverDoc wards={chosen} beds={beds} resident={today.assignments.resident ?? ''} />}
+    >
+      <label className="block">
+        <span className="field-label">الردهات</span>
+        <select className="input" value={scope} onChange={(e) => setScope(e.target.value)}>
+          <option value="all">جميع الردهات</option>
+          {wards.map((w) => (
+            <option key={w.id} value={w.id}>
+              {w.name}
+            </option>
+          ))}
+        </select>
+      </label>
+    </PrintChoice>
   )
 }

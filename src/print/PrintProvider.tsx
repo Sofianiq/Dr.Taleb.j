@@ -134,37 +134,36 @@ export function PrintProvider({ children }: { children: ReactNode }) {
       {job && rootRef.current && createPortal(<div key={job.id}>{job.content}</div>, rootRef.current)}
 
       {busy && job?.mode === 'pdf' && (
-        <div className="anim-fade-in fixed inset-0 z-[60] grid place-items-center bg-[#04120b]/45 backdrop-blur-[2px]">
-          <div className="card flex items-center gap-3 px-6 py-5 shadow-float">
-            <Spinner size={22} className="text-brand" />
-            <span className="font-semibold">جارٍ إنشاء ملف PDF…</span>
+        <div className="anim-fade fixed inset-0 z-[60] grid place-items-center bg-[var(--overlay)]">
+          <div className="panel flex items-center gap-3 px-5 py-4">
+            <Spinner size={18} className="text-brand" />
+            <span className="text-[0.92rem] font-semibold">جارٍ إنشاء ملف PDF…</span>
           </div>
         </div>
       )}
 
-      <Sheet open={!!result} onClose={closeResult} title="ملف PDF جاهز" subtitle={result?.file.name}>
-        <div className="flex flex-col items-center gap-2 pb-2 pt-1 text-center">
-          <div className="grid size-16 place-items-center rounded-3xl bg-brand-soft text-brand-ink">
-            <FileCheck2 size={30} />
+      <Sheet open={!!result} onClose={closeResult} size="sm" title="ملف PDF جاهز">
+        <div className="flex items-center gap-3 rounded-lg border border-line bg-surface-2 px-3.5 py-3">
+          <FileCheck2 size={22} className="shrink-0 text-brand-ink" />
+          <div className="min-w-0">
+            <div className="truncate text-[0.88rem] font-semibold text-ink" dir="ltr" style={{ textAlign: 'right' }}>
+              {result?.file.name}
+            </div>
+            <div className="text-[0.76rem] text-muted">{result ? `${Math.max(1, Math.round(result.file.size / 1024))} KB` : ''}</div>
           </div>
-          <p className="text-[0.9rem] text-muted">يمكنك تنزيل الملف أو مشاركته مباشرة عبر واتساب أو أي تطبيق آخر.</p>
-          <div className="mt-3 flex w-full flex-col gap-2.5 sm:flex-row">
-            {canShare && (
-              <button type="button" className="btn btn-wa flex-1" onClick={share}>
-                <Share2 size={18} />
-                مشاركة (واتساب…)
-              </button>
-            )}
-            <a
-              href={result?.url}
-              download={result?.file.name}
-              className="btn btn-primary flex-1"
-              onClick={() => window.setTimeout(closeResult, 1500)}
-            >
-              <Download size={18} />
-              تنزيل الملف
-            </a>
-          </div>
+        </div>
+        <p className="mt-3 text-[0.86rem] text-muted">يمكنك تنزيل الملف أو مشاركته مباشرة عبر واتساب أو أي تطبيق آخر.</p>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row-reverse">
+          <a href={result?.url} download={result?.file.name} className="btn btn-primary flex-1" onClick={() => window.setTimeout(closeResult, 1500)}>
+            <Download size={17} />
+            تنزيل الملف
+          </a>
+          {canShare && (
+            <button type="button" className="btn btn-wa flex-1" onClick={share}>
+              <Share2 size={17} />
+              مشاركة (واتساب…)
+            </button>
+          )}
         </div>
       </Sheet>
     </PrintContext.Provider>
