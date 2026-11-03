@@ -1,13 +1,16 @@
 import {
+  connectAuthEmulator,
   EmailAuthProvider,
+  inMemoryPersistence,
+  initializeAuth,
   reauthenticateWithCredential,
   signInWithEmailAndPassword,
   signOut,
   updatePassword,
 } from 'firebase/auth'
-import { FirebaseError } from 'firebase/app'
-import { auth } from './firebase'
-import { roleOf } from './constants'
+import { deleteApp, FirebaseError, initializeApp } from 'firebase/app'
+import { auth, AUTH_EMULATOR_URL, firebaseConfig, useEmulator } from './firebase'
+import { ACCOUNTS, roleOf } from './constants'
 
 /*
  * الحسابان (المدير والكادر) يُنشآن مرة واحدة من Firebase Console ← Authentication ← Users.
@@ -41,6 +44,7 @@ export async function logout(): Promise<void> {
 export async function changePassword(current: string, next: string): Promise<void> {
   const user = auth.currentUser
   if (!user?.email) throw new LoginError('يجب تسجيل الدخول أولاً.')
+  if (roleOf(user.email) !== 'admin') throw new LoginError('تغيير كلمات المرور من صلاحيات الإدارة فقط.')
   if (next.length < 6) throw new LoginError('يجب أن تتكون كلمة المرور الجديدة من ٦ أحرف أو أرقام على الأقل.')
   try {
     await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, current))
@@ -53,6 +57,36 @@ export async function changePassword(current: string, next: string): Promise<voi
     await updatePassword(user, next)
   } catch (err) {
     throw new LoginError(authMessage(err instanceof FirebaseError ? err.code : ''))
+  }
+}
+
+/**
+ * تغيير كلمة مرور حساب الكادر من حساب الإدارة.
+ * يُسجَّل الدخول إلى حساب الكادر في نسخة مؤقتة منفصلة من Firebase (في الذاكرة فقط)
+ * حتى تبقى جلسة الإدارة على هذا الجهاز كما هي، ثم تُحذف النسخة المؤقتة.
+ */
+export async function changeStaffPassword(current: string, next: string): Promise<void> {
+  if (roleOf(auth.currentUser?.email) !== 'admin') throw new LoginError('تغيير كلمة مرور حساب الكادر من صلاحيات الإدارة فقط.')
+  if (next.length < 6) throw new LoginError('يجب أن تتكون كلمة المرور الجديدة من ٦ أحرف أو أرقام على الأقل.')
+  const temp = initializeApp(firebaseConfig, `staff-password-${Date.now()}`)
+  try {
+    const tempAuth = initializeAuth(temp, { persistence: inMemoryPersistence })
+    if (useEmulator) connectAuthEmulator(tempAuth, AUTH_EMULATOR_URL, { disableWarnings: true })
+    let user
+    try {
+      user = (await signInWithEmailAndPassword(tempAuth, ACCOUNTS.staff.email, current)).user
+    } catch (err) {
+      const code = err instanceof FirebaseError ? err.code : ''
+      if (INVALID_CREDENTIAL_CODES.has(code)) throw new LoginError('كلمة المرور الحالية لحساب الكادر غير صحيحة.')
+      throw new LoginError(authMessage(code))
+    }
+    try {
+      await updatePassword(user, next)
+    } catch (err) {
+      throw new LoginError(authMessage(err instanceof FirebaseError ? err.code : ''))
+    }
+  } finally {
+    await deleteApp(temp).catch(() => {})
   }
 }
 

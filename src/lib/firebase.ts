@@ -8,7 +8,7 @@ import {
 } from 'firebase/firestore'
 
 // إعدادات مشروع Firebase الخاص بالمستشفى (هذه القيم عامة بطبيعتها، والحماية تتم عبر قواعد الأمان firestore.rules)
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: 'AIzaSyDWfdzZZvlCF_WHooQYXhPjP64MYu_1V10',
   authDomain: 'dr-taleb-j.firebaseapp.com',
   projectId: 'dr-taleb-j',
@@ -27,7 +27,9 @@ export const db = initializeFirestore(app, {
 })
 
 // للتطوير والاختبار المحلي فقط: VITE_FIREBASE_EMULATOR=true npm run dev
-if (import.meta.env.VITE_FIREBASE_EMULATOR === 'true') {
-  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })
+export const useEmulator = import.meta.env.VITE_FIREBASE_EMULATOR === 'true'
+export const AUTH_EMULATOR_URL = 'http://127.0.0.1:9099'
+if (useEmulator) {
+  connectAuthEmulator(auth, AUTH_EMULATOR_URL, { disableWarnings: true })
   connectFirestoreEmulator(db, '127.0.0.1', 8080)
 }
