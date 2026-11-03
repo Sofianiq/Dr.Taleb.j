@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { ChevronLeft, Download, Eye, EyeOff, KeyRound, LogOut, Share, SquarePlus } from 'lucide-react'
-import { changePassword, logout } from '../lib/auth'
+import { changePassword, changeStaffPassword, logout } from '../lib/auth'
 import { ACCOUNTS, ROLE_LABEL } from '../lib/constants'
 import { setOperatorName, useOperatorName } from '../lib/operator'
 import { usePwa } from '../lib/pwa'
@@ -38,7 +38,7 @@ function Row({ icon, label, hint, onClick, danger }: { icon: ReactNode; label: s
 }
 
 export function AccountSheet({ open, onClose, role }: { open: boolean; onClose: () => void; role: Role | null }) {
-  const [pwOpen, setPwOpen] = useState(false)
+  const [pwFor, setPwFor] = useState<Role | null>(null)
   const [installOpen, setInstallOpen] = useState(false)
   const [theme, setTheme] = useState<Theme>(readTheme)
   const operator = useOperatorName()
@@ -118,7 +118,19 @@ export function AccountSheet({ open, onClose, role }: { open: boolean; onClose: 
         </div>
 
         <div className="-mx-5 divide-y divide-line border-y border-line">
-          <Row icon={<KeyRound size={18} />} label="تغيير كلمة المرور" hint="تُطبَّق على جميع أجهزة هذا الحساب" onClick={() => setPwOpen(true)} />
+          {role === 'admin' ? (
+            <>
+              <Row icon={<KeyRound size={18} />} label="كلمة مرور حساب الإدارة" hint="تُطبَّق على جميع أجهزة هذا الحساب" onClick={() => setPwFor('admin')} />
+              <Row icon={<KeyRound size={18} />} label="كلمة مرور حساب الكادر الطبي" hint="لجميع الأطباء والممرضين" onClick={() => setPwFor('staff')} />
+            </>
+          ) : (
+            <div className="flex items-center gap-3 px-4 py-3">
+              <span className="text-muted">
+                <KeyRound size={18} />
+              </span>
+              <span className="text-[0.84rem] text-muted">تغيير كلمة المرور من صلاحيات الإدارة. راجع الإدارة عند الحاجة.</span>
+            </div>
+          )}
           {!pwa.isStandalone && (
             <Row
               icon={<Download size={18} />}
@@ -134,7 +146,7 @@ export function AccountSheet({ open, onClose, role }: { open: boolean; onClose: 
         </div>
       </Sheet>
 
-      <ChangePasswordSheet open={pwOpen} onClose={() => setPwOpen(false)} />
+      <ChangePasswordSheet account={pwFor} onClose={() => setPwFor(null)} />
       <InstallGuideSheet open={installOpen} onClose={() => setInstallOpen(false)} />
     </>
   )
@@ -178,7 +190,10 @@ export function PasswordInput({
   )
 }
 
-export function ChangePasswordSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** تغيير كلمة مرور أحد الحسابين — متاح لحساب الإدارة فقط */
+export function ChangePasswordSheet({ account, onClose }: { account: Role | null; onClose: () => void }) {
+  const open = account !== null
+  const forStaff = account === 'staff'
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [again, setAgain] = useState('')
@@ -202,8 +217,8 @@ export function ChangePasswordSheet({ open, onClose }: { open: boolean; onClose:
     if (next === current) return setError('كلمة المرور الجديدة مطابقة للحالية.')
     setBusy(true)
     try {
-      await changePassword(current, next)
-      toast('تم تغيير كلمة المرور بنجاح')
+      await (forStaff ? changeStaffPassword(current, next) : changePassword(current, next))
+      toast(forStaff ? 'تم تغيير كلمة مرور حساب الكادر الطبي' : 'تم تغيير كلمة المرور بنجاح')
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'تعذّر تغيير كلمة المرور.')
@@ -213,10 +228,21 @@ export function ChangePasswordSheet({ open, onClose }: { open: boolean; onClose:
   }
 
   return (
-    <Sheet open={open} onClose={onClose} size="sm" title="تغيير كلمة المرور" subtitle="ستُطبَّق كلمة المرور الجديدة على جميع الأجهزة التي تستخدم هذا الحساب">
+    <Sheet
+      open={open}
+      onClose={onClose}
+      size="sm"
+      title={forStaff ? 'كلمة مرور حساب الكادر الطبي' : 'كلمة مرور حساب الإدارة'}
+      subtitle={account ? ACCOUNTS[account].email : undefined}
+    >
       <form onSubmit={submit} className="space-y-4">
-        <Field label="كلمة المرور الحالية">
-          <PasswordInput value={current} onChange={setCurrent} autoComplete="current-password" autoFocus />
+        {forStaff && (
+          <p className="rounded-md border border-line bg-surface-2 px-3 py-2 text-[0.84rem] text-ink-2">
+            بعد التغيير ستُطلب كلمة المرور الجديدة على أجهزة الكادر عند تسجيل الدخول التالي، فأبلغها للأطباء والممرضين.
+          </p>
+        )}
+        <Field label={forStaff ? 'كلمة المرور الحالية لحساب الكادر' : 'كلمة المرور الحالية'}>
+          <PasswordInput value={current} onChange={setCurrent} autoComplete={forStaff ? 'off' : 'current-password'} autoFocus />
         </Field>
         <Field label="كلمة المرور الجديدة" hint="٦ أحرف أو أرقام على الأقل">
           <PasswordInput value={next} onChange={setNext} autoComplete="new-password" />

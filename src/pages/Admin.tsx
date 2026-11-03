@@ -6,9 +6,9 @@ import { EmptyState, Field, MetricStrip, PageHeader, SectionHeader, Segmented, S
 import { addAnnouncement, deleteAnnouncement, saveSettings } from '../data/actions'
 import { useAuth } from '../data/auth'
 import { bedLabel, hasPatient, useActivity, useArchive, useCensus, useData, wardBeds } from '../data/store'
-import type { Activity, AnnouncementLevel, Position } from '../data/types'
+import type { Activity, AnnouncementLevel, Position, Role } from '../data/types'
 import { logout } from '../lib/auth'
-import { HOSPITAL_AR, MANAGED_BY, UNITS } from '../lib/constants'
+import { ACCOUNTS, HOSPITAL_AR, MANAGED_BY, UNITS } from '../lib/constants'
 import { clock, isToday, timeAgo } from '../lib/dates'
 import { shortId } from '../lib/ids'
 
@@ -75,7 +75,7 @@ function ToolRow({ title, sub, to, onClick, danger }: { title: string; sub?: str
 }
 
 export function AdminPage() {
-  const { isAdmin, role } = useAuth()
+  const { isAdmin } = useAuth()
   const { wards, beds, announcements, contacts, settings } = useData()
   const { byWard, total } = useCensus()
   const { list: activity } = useActivity(true, 12)
@@ -85,7 +85,7 @@ export function AdminPage() {
   const [annOpen, setAnnOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [positionsOpen, setPositionsOpen] = useState(false)
-  const [pwOpen, setPwOpen] = useState(false)
+  const [pwFor, setPwFor] = useState<Role | null>(null)
 
   const today = useMemo(() => {
     let admitted = 0
@@ -258,7 +258,12 @@ export function AdminPage() {
           )}
           <ToolRow title="سجل المرضى المُخرَجين" sub="البحث في المرضى الذين غادروا المستشفى" to="/admin/archive" />
           <ToolRow title="سجل النشاطات" sub="كل التعديلات مع الوقت واسم من قام بها" to="/admin/activity" />
-          <ToolRow title="تغيير كلمة المرور" sub={role === 'admin' ? 'حساب الإدارة' : 'حساب الكادر الطبي'} onClick={() => setPwOpen(true)} />
+          {isAdmin && (
+            <>
+              <ToolRow title="كلمة مرور حساب الإدارة" sub={ACCOUNTS.admin.email} onClick={() => setPwFor('admin')} />
+              <ToolRow title="كلمة مرور حساب الكادر الطبي" sub={`${ACCOUNTS.staff.email} — لجميع الأطباء والممرضين`} onClick={() => setPwFor('staff')} />
+            </>
+          )}
           <ToolRow
             title="تسجيل الخروج"
             danger
@@ -272,7 +277,7 @@ export function AdminPage() {
       <AnnouncementSheet open={annOpen} onClose={() => setAnnOpen(false)} />
       <ShiftStartSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <PositionsSheet open={positionsOpen} onClose={() => setPositionsOpen(false)} />
-      <ChangePasswordSheet open={pwOpen} onClose={() => setPwOpen(false)} />
+      <ChangePasswordSheet account={pwFor} onClose={() => setPwFor(null)} />
     </div>
   )
 }
