@@ -74,6 +74,12 @@ export function shortDate(iso: string): string {
   return `${d.getDate()} ${AR_MONTHS[d.getMonth()]} ${d.getFullYear()}`
 }
 
+/** 29/10 */
+export function dayMonth(iso: string): string {
+  const d = fromIso(iso)
+  return d ? `${d.getDate()}/${d.getMonth() + 1}` : iso
+}
+
 /** 29/10/2026 */
 export function numericDate(iso: string): string {
   const d = fromIso(iso)
@@ -90,6 +96,23 @@ export function timeAgo(date: Date | null | undefined): string {
   const h = Math.round(m / 60)
   if (h < 24) return h === 1 ? 'قبل ساعة' : h === 2 ? 'قبل ساعتين' : h <= 10 ? `قبل ${h} ساعات` : `قبل ${h} ساعة`
   return dateTime(date)
+}
+
+/** مدة مقروءة مختصرة: دقيقتين، 3 ساعات، يومين */
+export function durationAr(ms: number): string {
+  const m = Math.max(1, Math.round(ms / 60_000))
+  if (m < 60) return m === 1 ? 'دقيقة' : m === 2 ? 'دقيقتين' : m <= 10 ? `${m} دقائق` : `${m} دقيقة`
+  const h = Math.round(m / 60)
+  if (h < 24) return h === 1 ? 'ساعة' : h === 2 ? 'ساعتين' : h <= 10 ? `${h} ساعات` : `${h} ساعة`
+  const d = Math.round(h / 24)
+  return d === 1 ? 'يوم' : d === 2 ? 'يومين' : d <= 10 ? `${d} أيام` : `${d} يوماً`
+}
+
+/** "قبل 3 ساعات" مختصرة حتى للأيام (للبطاقات) */
+export function agoShort(date: Date | null | undefined, now = Date.now()): string {
+  if (!date) return ''
+  const ms = now - date.getTime()
+  return ms < 45_000 ? 'الآن' : `قبل ${durationAr(ms)}`
 }
 
 export function dateTime(d: Date): string {

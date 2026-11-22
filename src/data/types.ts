@@ -26,9 +26,20 @@ export interface Department {
   position?: string
 }
 
+/** لون العلامة السريعة على بطاقة المريض */
+export type FlagTone = 'critical' | 'warn' | 'info' | 'brand' | 'neutral'
+
+/** علامة سريعة تُضاف لبطاقة المريض (صائم، عزل، خطر السقوط...) — تعدّلها الإدارة */
+export interface PatientFlag {
+  id: string
+  label: string
+  tone: FlagTone
+}
+
 export interface AppSettings {
   positions: Position[]
   departments: Department[]
+  flags: PatientFlag[]
   shiftStart: string
   wardsInitialized: boolean
 }
@@ -44,6 +55,8 @@ export interface Ward {
   vitals: VitalKey[]
   /** فئة المرضى (لحدود التنبيه في العلامات الحيوية) */
   population: Population
+  /** تكرار قياس العلامات الحيوية بالساعات (0 = بدون تذكير) */
+  vitalsEvery: number
   /** ردهة افتراضية لم تُحفظ بعد في قاعدة البيانات */
   virtual?: boolean
 }
@@ -63,6 +76,8 @@ export interface PatientData {
   doctorName: string
   procedure: string
   familyPhone: string
+  /** الحساسية (تظهر بشكل بارز في البطاقة) */
+  allergies: string
   notes: string
 }
 
@@ -73,6 +88,8 @@ export interface Bed extends PatientData {
   /** رقم السرير/الغرفة المعروض (قابل للتعديل) */
   label: string
   status: BedStatus
+  /** معرّفات العلامات السريعة المفعّلة للمريض */
+  flags: string[]
   admissionId: string
   admittedAt: Timestamp | null
   vitals: Partial<Record<VitalKey, string>>

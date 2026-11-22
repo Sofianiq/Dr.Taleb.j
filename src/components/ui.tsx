@@ -12,7 +12,8 @@ import { createPortal } from 'react-dom'
 import { AlertTriangle, Check, ChevronRight, Info, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import logoUrl from '../assets/logo.webp'
-import type { BedStatus } from '../data/types'
+import type { BedStatus, FlagTone } from '../data/types'
+import { registerOverlay } from '../lib/backstack'
 import { STATUS, type Tone } from '../lib/constants'
 
 /* ---------------------------------- الشعار ---------------------------------- */
@@ -66,8 +67,11 @@ export function Sheet({
       if (e.key === 'Escape') onCloseRef.current()
     }
     window.addEventListener('keydown', onKey)
-    panelRef.current?.focus({ preventScroll: true })
+    // زر الرجوع في الهاتف يغلق النافذة
+    const unregister = registerOverlay(() => onCloseRef.current())
+    if (!panelRef.current?.contains(document.activeElement)) panelRef.current?.focus({ preventScroll: true })
     return () => {
+      unregister()
       window.removeEventListener('keydown', onKey)
       openSheets--
       if (openSheets === 0) document.documentElement.style.overflow = ''
@@ -109,22 +113,29 @@ export function Sheet({
 
 /* --------------------------------- التنبيهات --------------------------------- */
 
-type ToastKind = 'success' | 'error' | 'info'
+type ToastKind = 'success' | 'error' | 'info' | 'alert'
+interface ToastOptions {
+  action?: { label: string; onClick: () => void }
+  duration?: number
+}
 interface ToastItem {
   id: number
   kind: ToastKind
   text: string
+  action?: ToastOptions['action']
 }
 
-const ToastContext = createContext<(text: string, kind?: ToastKind) => void>(() => {})
+const ToastContext = createContext<(text: string, kind?: ToastKind, options?: ToastOptions) => void>(() => {})
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([])
-  const push = useCallback((text: string, kind: ToastKind = 'success') => {
+  const push = useCallback((text: string, kind: ToastKind = 'success', options?: ToastOptions) => {
     const id = Date.now() + Math.random()
-    setItems((list) => [...list.filter((t) => t.text !== text).slice(-2), { id, kind, text }])
-    window.setTimeout(() => setItems((list) => list.filter((t) => t.id !== id)), kind === 'error' ? 5200 : 2600)
+    setItems((list) => [...list.filter((t) => t.text !== text).slice(-2), { id, kind, text, action: options?.action }])
+    const duration = options?.duration ?? (kind === 'alert' ? 9000 : kind === 'error' ? 5200 : 2600)
+    window.setTimeout(() => setItems((list) => list.filter((t) => t.id !== id)), duration)
   }, [])
+  const dismiss = (id: number) => setItems((list) => list.filter((t) => t.id !== id))
 
   return (
     <ToastContext.Provider value={push}>
@@ -134,17 +145,39 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           {items.map((t) => (
             <div
               key={t.id}
-              role="status"
-              className="anim-sheet pointer-events-auto flex max-w-md items-center gap-2.5 rounded-lg bg-[#16201c] px-3.5 py-2.5 text-[0.88rem] font-medium text-white shadow-[0_10px_30px_-10px_rgb(0_0_0/0.5)]"
+              role={t.kind === 'alert' ? 'alert' : 'status'}
+              className={`anim-sheet pointer-events-auto flex max-w-md items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-[0.88rem] font-medium text-white shadow-[0_10px_30px_-10px_rgb(0_0_0/0.5)] ${
+                t.kind === 'alert' ? 'bg-critical-solid' : 'bg-[#16201c]'
+              }`}
             >
               <span
                 className={`grid size-5 shrink-0 place-items-center rounded-full ${
-                  t.kind === 'error' ? 'bg-[#e5484d]' : t.kind === 'info' ? 'bg-[#4b8fd4]' : 'bg-[#2ea66b]'
+                  t.kind === 'alert' ? 'bg-white/20' : t.kind === 'error' ? 'bg-[#e5484d]' : t.kind === 'info' ? 'bg-[#4b8fd4]' : 'bg-[#2ea66b]'
                 }`}
               >
-                {t.kind === 'error' ? <X size={12} strokeWidth={3} /> : t.kind === 'info' ? <Info size={12} strokeWidth={3} /> : <Check size={12} strokeWidth={3} />}
+                {t.kind === 'alert' ? (
+                  <AlertTriangle size={12} strokeWidth={3} />
+                ) : t.kind === 'error' ? (
+                  <X size={12} strokeWidth={3} />
+                ) : t.kind === 'info' ? (
+                  <Info size={12} strokeWidth={3} />
+                ) : (
+                  <Check size={12} strokeWidth={3} />
+                )}
               </span>
-              <span>{t.text}</span>
+              <span className="min-w-0 flex-1">{t.text}</span>
+              {t.action && (
+                <button
+                  type="button"
+                  className="shrink-0 rounded-md border border-white/40 px-2.5 py-1 text-[0.8rem] font-bold hover:bg-white/10"
+                  onClick={() => {
+                    t.action?.onClick()
+                    dismiss(t.id)
+                  }}
+                >
+                  {t.action.label}
+                </button>
+              )}
             </div>
           ))}
         </div>,
@@ -386,6 +419,23 @@ export const TONE_DOT: Record<Tone, string> = {
   warn: 'bg-warn',
   neutral: 'bg-line-strong',
   muted: 'bg-faint',
+}
+
+/** ألوان العلامات السريعة على بطاقة المريض */
+export const FLAG_CHIP: Record<FlagTone, string> = {
+  critical: 'bg-critical-soft text-critical border-critical/25',
+  warn: 'bg-warn-soft text-warn border-warn/25',
+  info: 'bg-info-soft text-info border-info/25',
+  brand: 'bg-brand-soft text-brand-ink border-brand/25',
+  neutral: 'bg-surface-3 text-ink-2 border-line-strong',
+}
+
+export const FLAG_DOT: Record<FlagTone, string> = {
+  critical: 'bg-critical',
+  warn: 'bg-warn',
+  info: 'bg-info',
+  brand: 'bg-brand',
+  neutral: 'bg-faint',
 }
 
 export function StatusTag({ status, className = '' }: { status: BedStatus; className?: string }) {

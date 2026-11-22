@@ -11,7 +11,18 @@ import {
   type Timestamp,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
-import { DEFAULT_SETTINGS, DEFAULT_WARDS, EMPTY_PATIENT, MAX_BEDS, STATUS, UNITS, VITAL_ORDER } from '../lib/constants'
+import {
+  DEFAULT_SETTINGS,
+  DEFAULT_WARDS,
+  defaultVitalsEvery,
+  EMPTY_PATIENT,
+  FLAG_TONES,
+  MAX_BEDS,
+  MAX_FLAGS,
+  STATUS,
+  UNITS,
+  VITAL_ORDER,
+} from '../lib/constants'
 import { currentShiftDate, monthId } from '../lib/dates'
 import { bedIdOf, twoDigits } from '../lib/ids'
 import { useAuth } from './auth'
@@ -25,7 +36,9 @@ import type {
   BedStatus,
   Contact,
   Department,
+  FlagTone,
   Observation,
+  PatientFlag,
   Sex,
   ShiftDay,
   ShiftMonth,
@@ -50,6 +63,8 @@ interface DataState {
   /** الردهات افتراضية ولم تُحفظ بعد (أول تشغيل) */
   wardsVirtual: boolean
   beds: Record<string, Bed>
+  /** وصلت أول نسخة من بيانات الأسرّة */
+  bedsReady: boolean
   sheets: Record<string, Sheet>
   contacts: Contact[]
   announcements: Announcement[]
@@ -67,6 +82,10 @@ const ts = (v: unknown) => (v && typeof (v as Timestamp).toDate === 'function' ?
 
 const UNIT_KEYS = Object.keys(UNITS) as UnitKind[]
 const STATUS_KEYS = Object.keys(STATUS) as BedStatus[]
+const TONE_KEYS = FLAG_TONES.map((t) => t.value)
+
+const strings = (v: unknown, max: number): string[] =>
+  Array.isArray(v) ? (v as unknown[]).filter((x): x is string => typeof x === 'string' && x !== '').slice(0, max) : []
 
 function parseVitals(v: unknown): Partial<Record<VitalKey, string>> {
   const out: Partial<Record<VitalKey, string>> = {}
@@ -83,6 +102,7 @@ function parseWard(id: string, r: Raw, fallbackOrder: number): Ward | null {
   // نتجاهل مستندات الإصدار الأول التي لا تحتوي على اسم ونوع وحدة
   if (typeof r.name !== 'string' || !UNIT_KEYS.includes(r.unit as UnitKind)) return null
   const vitals = Array.isArray(r.vitals) ? (r.vitals as unknown[]).filter((k): k is VitalKey => VITAL_ORDER.includes(k as VitalKey)) : []
+  const population = r.population === 'neonate' ? 'neonate' : 'adult'
   return {
     id,
     order: typeof r.order === 'number' ? r.order : fallbackOrder,
@@ -91,7 +111,11 @@ function parseWard(id: string, r: Raw, fallbackOrder: number): Ward | null {
     beds: Math.min(n(r.beds, 1), MAX_BEDS),
     procedureLabel: s(r.procedureLabel, 'نوع العملية') || 'نوع العملية',
     vitals,
-    population: r.population === 'neonate' ? 'neonate' : 'adult',
+    population,
+    vitalsEvery:
+      typeof r.vitalsEvery === 'number' && Number.isFinite(r.vitalsEvery) && r.vitalsEvery >= 0
+        ? Math.min(r.vitalsEvery, 48)
+        : defaultVitalsEvery(population),
   }
 }
 
@@ -113,7 +137,9 @@ export function parseBed(id: string, r: Raw, pending = false): Bed {
     doctorName: s(r.doctorName),
     procedure: s(r.procedure),
     familyPhone: s(r.familyPhone),
+    allergies: s(r.allergies),
     notes: s(r.notes),
+    flags: STATUS[status].hasPatient ? strings(r.flags, MAX_FLAGS) : [],
     admissionId: s(r.admissionId),
     admittedAt: ts(r.admittedAt),
     vitals: parseVitals(r.vitals),
@@ -134,6 +160,7 @@ export function emptyBed(ward: Ward, index: number): Bed {
     index,
     label: '',
     status: 'empty',
+    flags: [],
     admissionId: '',
     admittedAt: null,
     vitals: {},
@@ -171,6 +198,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [wardsLoaded, setWardsLoaded] = useState(false)
   const [sheets, setSheets] = useState<Record<string, Sheet>>({})
   const [beds, setBeds] = useState<Record<string, Bed>>({})
+  const [bedsReady, setBedsReady] = useState(false)
   const [contacts, setContacts] = useState<Contact[]>([])
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [shiftDoc, setShiftDoc] = useState<ShiftMonth | null>(null)
@@ -193,10 +221,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
           .map((d) => ({ id: s(d.id), name: s(d.name), description: s(d.description), position: s(d.position) || undefined }))
           .filter((d) => d.id && d.name)
       : DEFAULT_SETTINGS.departments
+    // قائمة فارغة محفوظة تعني أن الإدارة حذفت كل العلامات
+    const flags: PatientFlag[] = Array.isArray(r.flags)
+      ? (r.flags as Raw[])
+          .map((f) => ({ id: s(f.id), label: s(f.label), tone: (TONE_KEYS.includes(f.tone as FlagTone) ? f.tone : 'neutral') as FlagTone }))
+          .filter((f) => f.id && f.label)
+          .slice(0, MAX_FLAGS)
+      : DEFAULT_SETTINGS.flags
     return {
       shiftStart: /^\d{1,2}:\d{2}$/.test(s(r.shiftStart)) ? s(r.shiftStart) : DEFAULT_SETTINGS.shiftStart,
       positions: positions.length ? positions : DEFAULT_SETTINGS.positions,
       departments,
+      flags,
       wardsInitialized: r.wardsInitialized === true,
     }
   }, [settingsRaw])
@@ -212,6 +248,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setWardsLoaded(false)
       setSheets({})
       setBeds({})
+      setBedsReady(false)
       setContacts([])
       setAnnouncements([])
       setStatus({ loaded: false, fromCache: true, pendingWrites: false, error: null })
@@ -283,6 +320,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             map[d.id] = parseBed(d.id, d.data({ serverTimestamps: 'estimate' }), d.metadata.hasPendingWrites)
           })
           setBeds(map)
+          setBedsReady(true)
           setStatus((st) => ({ ...st, pendingWrites: snap.metadata.hasPendingWrites }))
         },
         onError,
@@ -358,13 +396,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
       wardsReady,
       wardsVirtual,
       beds,
+      bedsReady,
       sheets,
       contacts,
       announcements,
       today: { monthId: todayMonth, day: todayDay, assignments: shiftDoc?.days?.[String(todayDay)] ?? {} },
       status,
     }),
-    [settings, wards, wardsReady, wardsVirtual, beds, sheets, contacts, announcements, todayMonth, todayDay, shiftDoc, status],
+    [settings, wards, wardsReady, wardsVirtual, beds, bedsReady, sheets, contacts, announcements, todayMonth, todayDay, shiftDoc, status],
   )
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>
@@ -461,6 +500,7 @@ export function useArchive(enabled: boolean): { list: ArchivedPatient[]; loading
             doctorName: s(r.doctorName),
             procedure: s(r.procedure) || s(r.operation),
             familyPhone: s(r.familyPhone),
+            allergies: s(r.allergies),
             notes: s(r.notes),
             vitals: parseVitals(r.vitals),
             admittedAt: ts(r.admittedAt),

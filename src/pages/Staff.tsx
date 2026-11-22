@@ -7,7 +7,8 @@ import { useAuth } from '../data/auth'
 import { useData } from '../data/store'
 import type { Contact, Department } from '../data/types'
 import { contactGroups, deptLetter } from '../lib/constants'
-import { whatsappUrl } from '../lib/phone'
+import { toLatinDigits, whatsappUrl } from '../lib/phone'
+import { matchesQuery } from '../lib/text'
 
 /** البحث عن جهة اتصال باسم الشخص المناوب لعرض زر واتساب بجانبه */
 export function findContactByName(contacts: Contact[], name: string | undefined): Contact | undefined {
@@ -170,10 +171,11 @@ export function DirectoryPage() {
   const [editing, setEditing] = useState<Contact | null | 'new'>(null)
 
   const needle = q.trim()
+  const digits = toLatinDigits(needle).replace(/\D/g, '').replace(/^0/, '')
   const filtered = contacts.filter(
     (c) =>
       (group === 'all' || c.dept === group) &&
-      (!needle || c.name.includes(needle) || c.role.includes(needle) || c.note.includes(needle) || c.phone.includes(needle.replace(/^0/, ''))),
+      (!needle || matchesQuery(needle, [c.name, c.role, c.note]) || (digits.length >= 3 && toLatinDigits(c.phone).replace(/\D/g, '').includes(digits))),
   )
   const groups = contactGroups(settings.departments).filter((g) => contacts.some((c) => c.dept === g.id))
 
@@ -195,7 +197,7 @@ export function DirectoryPage() {
 
       <div className="relative mb-3">
         <Search size={17} className="pointer-events-none absolute inset-y-0 start-3 my-auto text-faint" />
-        <input className="input ps-9" placeholder="ابحث بالاسم أو الاختصاص أو الرقم" value={q} onChange={(e) => setQ(e.target.value)} type="search" />
+        <input className="input ps-9" placeholder="ابحث بالاسم أو الاختصاص أو الرقم" value={q} onChange={(e) => setQ(e.target.value)} type="search" enterKeyHint="search" />
       </div>
 
       {groups.length > 0 && (

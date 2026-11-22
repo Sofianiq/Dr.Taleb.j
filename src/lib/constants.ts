@@ -2,7 +2,9 @@ import type {
   AppSettings,
   BedStatus,
   Department,
+  FlagTone,
   PatientData,
+  PatientFlag,
   Role,
   UnitKind,
   VitalKey,
@@ -65,7 +67,8 @@ export const VITALS: Record<VitalKey, VitalDef> = {
   temp: { key: 'temp', label: 'Temp', name: 'الحرارة', unit: '°C', placeholder: '37.0', numeric: true },
   rr: { key: 'rr', label: 'RR', name: 'معدل التنفس', unit: '/min', placeholder: '16', numeric: true },
   rbs: { key: 'rbs', label: 'RBS', name: 'سكر الدم', unit: 'mg/dL', placeholder: '110', numeric: true },
-  drain: { key: 'drain', label: 'Drain', name: 'التصريف', unit: 'ml', placeholder: '50', numeric: true },
+  // التصريف يُكتب أحياناً نصاً (R 50 / L 20، تم الرفع) لذلك يُفتح له لوحة مفاتيح كاملة
+  drain: { key: 'drain', label: 'Drain', name: 'التصريف', unit: 'ml', placeholder: '50', numeric: false },
   uop: { key: 'uop', label: 'UOP', name: 'الإدرار', unit: 'ml', placeholder: '400', numeric: true },
   weight: { key: 'weight', label: 'Wt', name: 'الوزن', unit: 'g', placeholder: '2500', numeric: true },
 }
@@ -102,12 +105,37 @@ export const EMPTY_PATIENT: PatientData = {
   doctorName: '',
   procedure: '',
   familyPhone: '',
+  allergies: '',
   notes: '',
+}
+
+/** هل في حقل الحساسية ما يستحق التنبيه؟ (يُتجاهل "لا يوجد" وما شابهها) */
+export function hasAllergy(v: string): boolean {
+  const t = v.trim()
+  return t !== '' && !/^(لا|لايوجد|لا يوجد|لا توجد|لاتوجد|كلا|none|no|nil|nkda|nka|-|—)$/i.test(t)
 }
 
 /* ------------------------------ الردهات ------------------------------ */
 
 export const PROCEDURE_LABELS = ['نوع العملية', 'نوع الإجراء', 'التشخيص']
+
+/** "نوع العملية" ← "العملية" للعرض المختصر في البطاقة */
+export const shortProcedureLabel = (label: string) => label.replace(/^نوع\s+/, '') || label
+
+/** خيارات تكرار قياس العلامات الحيوية (بالساعات) */
+export const VITALS_EVERY_OPTIONS: { value: number; label: string }[] = [
+  { value: 0, label: 'بدون تذكير' },
+  { value: 1, label: 'كل ساعة' },
+  { value: 2, label: 'كل ساعتين' },
+  { value: 3, label: 'كل 3 ساعات' },
+  { value: 4, label: 'كل 4 ساعات' },
+  { value: 6, label: 'كل 6 ساعات' },
+  { value: 8, label: 'كل 8 ساعات' },
+  { value: 12, label: 'كل 12 ساعة' },
+  { value: 24, label: 'مرة كل يوم' },
+]
+
+export const defaultVitalsEvery = (population: Ward['population']) => (population === 'neonate' ? 3 : 6)
 
 /** الردهات الافتراضية للمستشفى — تُعدَّل وتُضاف ردهات أخرى من الإدارة */
 export const DEFAULT_WARDS: Ward[] = [
@@ -120,6 +148,7 @@ export const DEFAULT_WARDS: Ward[] = [
     procedureLabel: 'نوع العملية',
     vitals: ['bp', 'pulse', 'spo2', 'temp', 'drain', 'uop'],
     population: 'adult',
+    vitalsEvery: 6,
   },
   {
     id: 'cathlab',
@@ -130,6 +159,7 @@ export const DEFAULT_WARDS: Ward[] = [
     procedureLabel: 'نوع الإجراء',
     vitals: ['bp', 'pulse', 'spo2', 'rr', 'uop'],
     population: 'adult',
+    vitalsEvery: 6,
   },
   {
     id: 'nicu',
@@ -140,6 +170,7 @@ export const DEFAULT_WARDS: Ward[] = [
     procedureLabel: 'التشخيص',
     vitals: ['pulse', 'spo2', 'temp', 'rr', 'weight'],
     population: 'neonate',
+    vitalsEvery: 3,
   },
 ]
 
@@ -183,10 +214,33 @@ export const DEFAULT_DEPARTMENTS: Department[] = [
 /** حرف القسم حسب ترتيبه: A, B, C ... */
 export const deptLetter = (index: number) => String.fromCharCode(65 + (index % 26))
 
+/* ------------------------------ العلامات السريعة ------------------------------ */
+
+export const FLAG_TONES: { value: FlagTone; label: string }[] = [
+  { value: 'critical', label: 'أحمر' },
+  { value: 'warn', label: 'برتقالي' },
+  { value: 'info', label: 'أزرق' },
+  { value: 'brand', label: 'أخضر' },
+  { value: 'neutral', label: 'رمادي' },
+]
+
+export const DEFAULT_FLAGS: PatientFlag[] = [
+  { id: 'npo', label: 'صائم', tone: 'warn' },
+  { id: 'preop', label: 'قبل العملية', tone: 'info' },
+  { id: 'isolation', label: 'عزل', tone: 'critical' },
+  { id: 'fall', label: 'خطر السقوط', tone: 'warn' },
+  { id: 'o2', label: 'على الأوكسجين', tone: 'info' },
+  { id: 'labs', label: 'بانتظار نتائج', tone: 'neutral' },
+  { id: 'consult', label: 'بانتظار استشارة', tone: 'neutral' },
+]
+
+export const MAX_FLAGS = 12
+
 export const DEFAULT_SETTINGS: AppSettings = {
   shiftStart: '08:00',
   wardsInitialized: false,
   departments: DEFAULT_DEPARTMENTS,
+  flags: DEFAULT_FLAGS,
   positions: [
     { id: 'resident', label: 'الطبيب المقيم' },
     { id: 'surgeon', label: 'الجراح الخافر' },

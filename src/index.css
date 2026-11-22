@@ -1,5 +1,15 @@
 @import 'tailwindcss';
 
+/* خط الشعار الكتابي: المجموعة العربية فقط (يُستخدم لاسم المستشفى) */
+@font-face {
+  font-family: 'Noto Kufi Arabic Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('../node_modules/@fontsource-variable/noto-kufi-arabic/files/noto-kufi-arabic-arabic-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+200C-200E, U+2010-2011, U+FB50-FDFF, U+FE70-FEFC;
+}
+
 /*
  * نظام التصميم: مسطّح ومؤسسي — ألوان محايدة، لون المستشفى الأخضر للإجراءات الأساسية فقط،
  * والأحمر للحالات الحرجة. حدود رفيعة، زوايا صغيرة، بلا تدرّجات أو زخارف.
@@ -22,6 +32,7 @@
   --on-brand: #ffffff;
   --critical: #b42318;
   --critical-soft: #fcebe9;
+  --critical-solid: #b42318;
   --info: #1f5f9e;
   --info-soft: #e8f0f8;
   --warn: #93560a;
@@ -55,6 +66,7 @@
     --on-brand: #05140c;
     --critical: #f0736b;
     --critical-soft: #2d1513;
+    --critical-solid: #b3261e;
     --info: #7cb0e6;
     --info-soft: #12202d;
     --warn: #e2a84d;
@@ -63,7 +75,7 @@
     --wa-ink: #05140c;
     --rule: #e5484d;
     --chart: #27a86a;
-  --chart-2: #5b95d6;
+    --chart-2: #5b95d6;
     --chart-track: #1d2924;
     --overlay: rgb(0 0 0 / 0.6);
     color-scheme: dark;
@@ -88,6 +100,7 @@
   --on-brand: #05140c;
   --critical: #f0736b;
   --critical-soft: #2d1513;
+  --critical-solid: #b3261e;
   --info: #7cb0e6;
   --info-soft: #12202d;
   --warn: #e2a84d;
@@ -123,6 +136,7 @@
   --color-on-brand: var(--on-brand);
   --color-critical: var(--critical);
   --color-critical-soft: var(--critical-soft);
+  --color-critical-solid: var(--critical-solid);
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
   --color-warn: var(--warn);
@@ -146,7 +160,7 @@
     background: var(--bg);
     color: var(--ink);
     font-family: var(--font-sans);
-    font-size: 15px;
+    font-size: 0.9375rem;
     line-height: 1.55;
     min-height: 100dvh;
     overscroll-behavior-y: none;
@@ -275,6 +289,15 @@
   .btn-sm.btn-icon {
     min-width: 2rem;
   }
+  /* شاشات اللمس: أهداف ضغط أكبر للأزرار الصغيرة */
+  @media (pointer: coarse) {
+    .btn-sm {
+      min-height: 2.25rem;
+    }
+    .btn-sm.btn-icon {
+      min-width: 2.25rem;
+    }
+  }
 
   .field-label {
     display: block;
@@ -291,7 +314,8 @@
     background: var(--surface);
     border: 1px solid var(--line-strong);
     color: var(--ink);
-    font-size: 0.98rem;
+    /* 16px على الأقل حتى لا يُكبّر iPhone الصفحة عند الكتابة */
+    font-size: max(1rem, 16px);
     transition:
       border-color 0.12s,
       box-shadow 0.12s;
@@ -302,10 +326,18 @@
   .input:hover:not(:focus):not(:disabled) {
     border-color: var(--faint);
   }
-  .input:focus {
+  .input:focus,
+  .input-split:focus-within {
     outline: none;
     border-color: var(--brand);
     box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 16%, transparent);
+  }
+  .input-split input {
+    min-width: 0;
+    background: transparent;
+    border: 0;
+    outline: none;
+    font-size: inherit;
   }
   .input:disabled {
     background: var(--surface-2);
@@ -329,6 +361,20 @@
   }
   .ltr-input:placeholder-shown {
     direction: rtl;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    max-width: 100%;
+    padding: 0.08rem 0.55rem;
+    border: 1px solid;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
   }
 
   .tag {
@@ -360,6 +406,193 @@
   }
   .no-scrollbar::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/* ============ بطاقة الغرفة / السرير ============ */
+@layer components {
+  .bed-card {
+    --strip: transparent;
+    position: relative;
+    display: flex;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+    transition: border-color 0.12s;
+  }
+  @media (hover: hover) {
+    .bed-card:hover {
+      border-color: var(--line-strong);
+    }
+  }
+  .bed-card:has(> .bed-hit:focus-visible) {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+  }
+  /* الضغط على أي مكان في البطاقة يفتحها، والأزرار داخلها تعمل مستقلة */
+  .bed-hit {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+  }
+  .bed-hit:focus-visible {
+    outline: none;
+  }
+  .bed-hit:active {
+    background: color-mix(in oklab, var(--ink) 5%, transparent);
+  }
+  .bed-card > :not(.bed-hit) {
+    position: relative;
+    pointer-events: none;
+  }
+  .bed-card .bed-action {
+    position: relative;
+    z-index: 1;
+    pointer-events: auto;
+  }
+
+  /* عمود رقم الغرفة: لونه يعبّر عن الحالة */
+  .bed-spine {
+    flex: none;
+    width: 3.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+    padding: 0.5rem 0.15rem;
+    background: var(--surface-2);
+    color: var(--ink);
+    border-inline-start: 4px solid var(--strip);
+    border-inline-end: 1px solid var(--line);
+    text-align: center;
+  }
+  .bed-no {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+  .bed-unit {
+    font-size: 0.64rem;
+    font-weight: 600;
+    opacity: 0.75;
+  }
+  @media (min-width: 640px) {
+    .bed-spine {
+      width: 4rem;
+    }
+    .bed-no {
+      font-size: 1.7rem;
+    }
+  }
+
+  .bed-card[data-status='occupied'] {
+    --strip: var(--brand);
+  }
+  .bed-card[data-status='critical'] {
+    --strip: var(--critical-solid);
+    border-color: color-mix(in oklab, var(--critical) 50%, var(--line));
+    background: color-mix(in oklab, var(--critical-soft) 45%, var(--surface));
+  }
+  .bed-card[data-status='critical'] .bed-spine {
+    background: var(--critical-solid);
+    color: #fff;
+    border-inline-end-color: transparent;
+  }
+  .bed-card[data-status='critical'] .bed-foot {
+    border-top-color: color-mix(in oklab, var(--critical) 25%, var(--line));
+  }
+  .bed-card[data-status='discharge'] {
+    --strip: var(--info);
+  }
+  .bed-card[data-status='discharge'] .bed-spine {
+    background: var(--info-soft);
+    color: var(--info);
+  }
+  .bed-card[data-status='reserved'] {
+    --strip: var(--warn);
+  }
+  .bed-card[data-status='reserved'] .bed-spine {
+    background: var(--warn-soft);
+    color: var(--warn);
+  }
+  .bed-card[data-status='cleaning'] .bed-spine {
+    background: repeating-linear-gradient(-45deg, var(--surface-2) 0 6px, var(--surface-3) 6px 12px);
+    color: var(--muted);
+  }
+  .bed-card[data-status='empty'] {
+    background: transparent;
+    border-style: dashed;
+    border-color: var(--line-strong);
+  }
+  .bed-card[data-status='empty'] .bed-spine {
+    background: transparent;
+    color: var(--muted);
+    border-inline-end: 1px dashed var(--line-strong);
+  }
+
+  /* محتوى البطاقة: عمود واحد في الهاتف، وعمودان (البيانات | العلامات الحيوية) في البطاقات العريضة */
+  .bed-main {
+    container-type: inline-size;
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+  }
+  .bed-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'head' 'alerts' 'facts' 'vitals' 'notes';
+    padding: 0.7rem 0.8rem 0.75rem;
+  }
+  .bed-body > * + * {
+    margin-top: 0.6rem;
+  }
+  .bed-head {
+    grid-area: head;
+  }
+  .bed-alerts {
+    grid-area: alerts;
+  }
+  .bed-facts {
+    grid-area: facts;
+  }
+  .bed-vitals {
+    grid-area: vitals;
+  }
+  .bed-notes {
+    grid-area: notes;
+  }
+  @container (min-width: 36rem) {
+    .bed-body {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      grid-template-rows: auto auto auto 1fr;
+      grid-template-areas: 'head vitals' 'alerts vitals' 'facts vitals' 'notes vitals';
+      column-gap: 1.25rem;
+      padding: 0.85rem 1rem;
+    }
+    .bed-body > .bed-vitals {
+      margin-top: 0;
+      align-self: start;
+    }
+  }
+  .bed-foot {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: auto;
+    min-height: 2.75rem;
+    padding-block: 0.35rem;
+    padding-inline: 0.8rem 0.5rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.76rem;
   }
 }
 

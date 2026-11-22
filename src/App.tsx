@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { lazy, useEffect, useState, type ReactNode } from 'react'
 import { HashRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { ConfirmProvider, Logo, Spinner, ToastProvider } from './components/ui'
@@ -6,15 +6,36 @@ import { AuthProvider, useAuth } from './data/auth'
 import { DataProvider } from './data/store'
 import { MANAGED_BY } from './lib/constants'
 import { PrintProvider } from './print/PrintProvider'
-import { AdminPage } from './pages/Admin'
-import { ActivityPage, ArchivePage, DepartmentsManagerPage, WardsManagerPage } from './pages/AdminTools'
-import { InquiriesPage } from './pages/Inquiries'
 import { Intro } from './pages/Intro'
 import { Login } from './pages/Login'
 import { ResidentPage } from './pages/Resident'
-import { ShiftsPage } from './pages/Shifts'
-import { DepartmentPage, StaffPage } from './pages/Staff'
 import { WardPage } from './pages/Ward'
+
+// الصفحات الأقل استخداماً تُحمَّل عند الحاجة لتسريع فتح التطبيق على الهواتف
+const loadAdmin = () => import('./pages/Admin')
+const loadAdminTools = () => import('./pages/AdminTools')
+const loadStaff = () => import('./pages/Staff')
+const loadInquiries = () => import('./pages/Inquiries')
+const loadShifts = () => import('./pages/Shifts')
+const AdminPage = lazy(() => loadAdmin().then((m) => ({ default: m.AdminPage })))
+const WardsManagerPage = lazy(() => loadAdminTools().then((m) => ({ default: m.WardsManagerPage })))
+const DepartmentsManagerPage = lazy(() => loadAdminTools().then((m) => ({ default: m.DepartmentsManagerPage })))
+const ActivityPage = lazy(() => loadAdminTools().then((m) => ({ default: m.ActivityPage })))
+const ArchivePage = lazy(() => loadAdminTools().then((m) => ({ default: m.ArchivePage })))
+const StaffPage = lazy(() => loadStaff().then((m) => ({ default: m.StaffPage })))
+const DepartmentPage = lazy(() => loadStaff().then((m) => ({ default: m.DepartmentPage })))
+const InquiriesPage = lazy(() => loadInquiries().then((m) => ({ default: m.InquiriesPage })))
+const ShiftsPage = lazy(() => loadShifts().then((m) => ({ default: m.ShiftsPage })))
+
+/** تحميل بقية الصفحات مسبقاً بعد أن يهدأ الجهاز، فيكون التنقل بينها فورياً */
+function usePrefetchPages() {
+  useEffect(() => {
+    const run = () => [loadAdmin, loadAdminTools, loadStaff, loadInquiries, loadShifts].forEach((load) => void load().catch(() => {}))
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }
+    if (w.requestIdleCallback) w.requestIdleCallback(run, { timeout: 4000 })
+    else window.setTimeout(run, 2500)
+  }, [])
+}
 
 const INTRO_KEY = 'intro-seen'
 
@@ -40,6 +61,7 @@ function Splash() {
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { ready, user } = useAuth()
+  usePrefetchPages()
   if (!ready) return <Splash />
   if (!user) return <Navigate to="/login" replace />
   return <>{children}</>

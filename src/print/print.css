@@ -449,7 +449,27 @@
   overflow: hidden;
 }
 
+.pp-ho-flags {
+  font-weight: 600;
+  color: #33495a;
+}
+
 /* ملخص المريض */
+.pp-alerts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2mm 6mm;
+  margin-top: 3mm;
+  padding: 1.8mm 2.6mm;
+  border: 0.3mm solid #f0c9c9;
+  border-radius: 1.6mm;
+  background: #fdf5f5;
+  font-size: 8.6pt;
+  color: #33495a;
+}
+.pp-alerts b {
+  font-weight: 700;
+}
 .pp-info {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;

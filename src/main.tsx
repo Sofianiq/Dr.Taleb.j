@@ -8,13 +8,13 @@ import '@fontsource/ibm-plex-sans-arabic/latin-400.css'
 import '@fontsource/ibm-plex-sans-arabic/latin-500.css'
 import '@fontsource/ibm-plex-sans-arabic/latin-600.css'
 import '@fontsource/ibm-plex-sans-arabic/latin-700.css'
-import '@fontsource-variable/noto-kufi-arabic/index.css'
 import './index.css'
 import App from './App'
-import { applyStoredTheme } from './components/AccountSheet'
+import { applyStoredTextSize, applyStoredTheme } from './components/AccountSheet'
 import { initPwa } from './lib/pwa'
 
 applyStoredTheme()
+applyStoredTextSize()
 initPwa()
 
 createRoot(document.getElementById('root')!).render(

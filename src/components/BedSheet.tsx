@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { ArrowLeftRight, FileText, LogOut, Pencil, RefreshCw, UserPlus } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { AlertTriangle, ArrowLeftRight, Check, ChevronLeft, ChevronRight, FileText, LogOut, Pencil, RefreshCw, UserPlus } from 'lucide-react'
 import {
   admitPatient,
   dischargePatient,
@@ -12,18 +12,18 @@ import {
 import { useAuth } from '../data/auth'
 import { bedLabel, hasPatient, useData, useObservations, wardBeds } from '../data/store'
 import type { Bed, BedStatus, Observation, PatientData, Sex, VitalKey, Ward } from '../data/types'
-import { DISCHARGE_TYPES, EMPTY_PATIENT, FREE_STATUSES, PATIENT_STATUSES, STATUS, UNITS, VITALS } from '../lib/constants'
-import { dateTime, fromLocalInput, shortDateTime, stayDay, stayLength, timeAgo, toLocalInput } from '../lib/dates'
-import { isValidPhone, whatsappUrl } from '../lib/phone'
-import { LEVEL_TEXT, vitalLevel } from '../lib/vitals'
+import { DISCHARGE_TYPES, EMPTY_PATIENT, FREE_STATUSES, hasAllergy, PATIENT_STATUSES, STATUS, UNITS, VITALS } from '../lib/constants'
+import { agoShort, dateTime, fromLocalInput, shortDateTime, stayDay, stayLength, timeAgo, toLocalInput } from '../lib/dates'
+import { isValidPhone, toLatinDigits, whatsappUrl } from '../lib/phone'
+import { formatVital, LEVEL_TEXT, splitBp, vitalLevel, vitalsDue } from '../lib/vitals'
 import { PatientDoc } from '../print/docs'
 import { usePrint } from '../print/PrintProvider'
 import { WhatsAppIcon } from './Contacts'
-import { Field, Segmented, Sheet, StatusTag, Tabs, TONE_DOT, useConfirm, useToast } from './ui'
+import { Field, FLAG_CHIP, Segmented, Sheet, StatusTag, Tabs, TONE_DOT, useConfirm, useToast } from './ui'
 import { VitalsChart } from './VitalsChart'
 
 type Vitals = Partial<Record<VitalKey, string>>
-type Tab = 'info' | 'vitals' | 'history'
+export type BedTab = 'info' | 'vitals' | 'history'
 
 const patientOf = (bed: Bed): PatientData => ({
   patientName: bed.patientName,
@@ -32,31 +32,48 @@ const patientOf = (bed: Bed): PatientData => ({
   doctorName: bed.doctorName,
   procedure: bed.procedure,
   familyPhone: bed.familyPhone,
+  allergies: bed.allergies,
   notes: bed.notes,
 })
 
+const sameFlags = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x))
+
 /* ------------------------------ حقول المريض ------------------------------ */
 
-function PatientFields({ ward, value, onChange }: { ward: Ward; value: PatientData; onChange: (v: PatientData) => void }) {
+function PatientFields({
+  ward,
+  value,
+  onChange,
+  flags,
+  onFlags,
+}: {
+  ward: Ward
+  value: PatientData
+  onChange: (v: PatientData) => void
+  flags: string[]
+  onFlags: (f: string[]) => void
+}) {
+  const { settings } = useData()
   const set = (k: keyof PatientData) => (e: { target: { value: string } }) => onChange({ ...value, [k]: e.target.value })
+  const toggle = (id: string) => onFlags(flags.includes(id) ? flags.filter((x) => x !== id) : [...flags, id])
   return (
     <>
       <Field label="اسم المريض">
-        <input className="input font-semibold" value={value.patientName} onChange={set('patientName')} maxLength={120} placeholder="الاسم الثلاثي" />
+        <input className="input font-semibold" value={value.patientName} onChange={set('patientName')} maxLength={120} placeholder="الاسم الثلاثي" dir="auto" autoComplete="off" enterKeyHint="next" />
       </Field>
       <div className="grid grid-cols-[1fr_auto] gap-3">
         <Field label="العمر">
-          <input className="input" value={value.age} onChange={set('age')} maxLength={20} placeholder={ward.population === 'neonate' ? 'مثال: 3 أيام' : 'بالسنوات'} />
+          <input className="input" value={value.age} onChange={set('age')} maxLength={20} placeholder={ward.population === 'neonate' ? 'مثال: 3 أيام' : 'بالسنوات'} autoComplete="off" enterKeyHint="next" />
         </Field>
         <div>
           <span className="field-label">الجنس</span>
-          <div className="flex h-[2.6rem] gap-1 rounded-[7px] border border-line-strong p-0.5">
+          <div className="flex h-[2.75rem] gap-1 rounded-[7px] border border-line-strong p-0.5">
             {(['ذكر', 'أنثى'] as Sex[]).map((s) => (
               <button
                 key={s}
                 type="button"
                 onClick={() => onChange({ ...value, sex: value.sex === s ? '' : s })}
-                className={`rounded-md px-3.5 text-[0.86rem] font-semibold ${value.sex === s ? 'bg-ink text-surface' : 'text-muted hover:text-ink'}`}
+                className={`rounded-md px-3.5 text-[0.88rem] font-semibold ${value.sex === s ? 'bg-ink text-surface' : 'text-muted hover:text-ink'}`}
                 aria-pressed={value.sex === s}
               >
                 {s}
@@ -67,15 +84,53 @@ function PatientFields({ ward, value, onChange }: { ward: Ward; value: PatientDa
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="الطبيب المختص">
-          <input className="input" value={value.doctorName} onChange={set('doctorName')} maxLength={120} placeholder="د. " />
+          <input className="input" value={value.doctorName} onChange={set('doctorName')} maxLength={120} placeholder="د. " dir="auto" autoComplete="off" enterKeyHint="next" />
         </Field>
         <Field label={ward.procedureLabel}>
-          <input className="input" value={value.procedure} onChange={set('procedure')} maxLength={200} />
+          <input className="input" value={value.procedure} onChange={set('procedure')} maxLength={200} dir="auto" autoComplete="off" enterKeyHint="next" />
         </Field>
       </div>
+      <Field label="الحساسية" hint="تظهر بلون أحمر بارز في بطاقة المريض. اتركها فارغة إن لم توجد.">
+        <input
+          className={`input ${hasAllergy(value.allergies) ? '!border-critical/60 text-critical' : ''}`}
+          value={value.allergies}
+          onChange={set('allergies')}
+          maxLength={200}
+          placeholder="مثال: البنسلين، الأسبرين"
+          dir="auto"
+          autoComplete="off"
+          enterKeyHint="next"
+        />
+      </Field>
+      {settings.flags.length > 0 && (
+        <div>
+          <span className="field-label" id={`flags-${ward.id}`}>
+            علامات سريعة
+          </span>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-labelledby={`flags-${ward.id}`}>
+            {settings.flags.map((f) => {
+              const on = flags.includes(f.id)
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => toggle(f.id)}
+                  aria-pressed={on}
+                  className={`inline-flex min-h-9 items-center gap-1 rounded-full border px-3 text-[0.84rem] font-semibold transition-colors ${
+                    on ? FLAG_CHIP[f.tone] : 'border-line-strong bg-surface text-muted hover:text-ink'
+                  }`}
+                >
+                  {on && <Check size={14} strokeWidth={2.6} />}
+                  {f.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
       <Field label="هاتف ذوي المريض" hint="للتواصل المباشر عبر واتساب">
         <div className="flex gap-2">
-          <input className="input ltr-input" type="tel" inputMode="tel" value={value.familyPhone} onChange={set('familyPhone')} maxLength={30} placeholder="07xx xxx xxxx" />
+          <input className="input ltr-input" type="tel" inputMode="tel" value={value.familyPhone} onChange={set('familyPhone')} maxLength={30} placeholder="07xx xxx xxxx" autoComplete="off" />
           {isValidPhone(value.familyPhone) && (
             <a href={whatsappUrl(value.familyPhone)} target="_blank" rel="noopener noreferrer" className="btn btn-wa btn-icon shrink-0" aria-label="مراسلة ذوي المريض عبر واتساب">
               <WhatsAppIcon size={18} />
@@ -84,7 +139,7 @@ function PatientFields({ ward, value, onChange }: { ward: Ward; value: PatientDa
         </div>
       </Field>
       <Field label="ملاحظات والحالة العامة">
-        <textarea className="input" rows={3} value={value.notes} onChange={set('notes')} maxLength={3000} />
+        <textarea className="input" rows={3} value={value.notes} onChange={set('notes')} maxLength={3000} dir="auto" />
       </Field>
     </>
   )
@@ -92,35 +147,136 @@ function PatientFields({ ward, value, onChange }: { ward: Ward; value: PatientDa
 
 /* ------------------------------ حقول العلامات الحيوية ------------------------------ */
 
-function VitalsInputs({ ward, value, onChange, last }: { ward: Ward; value: Vitals; onChange: (v: Vitals) => void; last?: Vitals }) {
+/** حقل ضغط الدم بخانتين رقميتين (لوحة أرقام في الهاتف بدلاً من البحث عن رمز "/") */
+function BpInput({ id, value, onChange, tone, enterLast }: { id: string; value: string; onChange: (v: string) => void; tone: string; enterLast: boolean }) {
+  const [sys, dia] = splitBp(value)
+  const sysRef = useRef<HTMLInputElement>(null)
+  const diaRef = useRef<HTMLInputElement>(null)
+  const emit = (s: string, d: string) => onChange(s || d ? `${s}/${d}` : '')
+  const digits = (v: string) => toLatinDigits(v).replace(/\D/g, '').slice(0, 3)
+  return (
+    <div className={`input input-split flex items-center gap-1 px-2 ${tone}`} dir="ltr">
+      <input
+        id={id}
+        ref={sysRef}
+        aria-label="الضغط الانقباضي"
+        className="w-full text-center font-semibold tabular-nums"
+        inputMode="numeric"
+        enterKeyHint="next"
+        autoComplete="off"
+        placeholder="120"
+        value={sys}
+        onChange={(e) => {
+          const raw = toLatinDigits(e.target.value)
+          // لصق "120/80" أو كتابة فاصل ينقل إلى الخانة الثانية
+          const pair = /^(\d{1,3})\D+(\d{1,3})/.exec(raw)
+          if (pair) {
+            emit(pair[1], pair[2])
+            diaRef.current?.focus()
+            return
+          }
+          const d = digits(raw)
+          emit(d, dia)
+          if (raw !== d || d.length === 3) diaRef.current?.focus()
+        }}
+      />
+      <span className="select-none text-faint">/</span>
+      <input
+        ref={diaRef}
+        aria-label="الضغط الانبساطي"
+        className="w-full text-center font-semibold tabular-nums"
+        inputMode="numeric"
+        enterKeyHint={enterLast ? 'done' : 'next'}
+        autoComplete="off"
+        placeholder="80"
+        value={dia}
+        onChange={(e) => emit(sys, digits(e.target.value))}
+        onKeyDown={(e) => {
+          if (e.key === 'Backspace' && !dia) {
+            e.preventDefault()
+            sysRef.current?.focus()
+          }
+        }}
+      />
+    </div>
+  )
+}
+
+function VitalsInputs({
+  ward,
+  value,
+  onChange,
+  last,
+  focusKey,
+}: {
+  ward: Ward
+  value: Vitals
+  onChange: (v: Vitals) => void
+  last?: Vitals
+  /** عند تغيّره ينتقل المؤشر إلى أول خانة (لتسجيل قراءات الجولة بسرعة) */
+  focusKey?: string
+}) {
+  const box = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (focusKey) box.current?.querySelector('input')?.focus({ preventScroll: true })
+  }, [focusKey])
+
   if (ward.vitals.length === 0) {
     return <p className="text-[0.86rem] text-muted">لم تُحدَّد علامات حيوية لهذه الردهة. يمكن للإدارة تحديدها من إعدادات الردهة.</p>
   }
+
+  // زر "التالي" في لوحة المفاتيح ينقل إلى الخانة التالية
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Enter' || !(e.target instanceof HTMLInputElement)) return
+    e.preventDefault()
+    const inputs = Array.from(box.current?.querySelectorAll('input') ?? [])
+    const next = inputs[inputs.indexOf(e.target) + 1]
+    if (next) next.focus()
+    else e.target.blur()
+  }
+
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3" dir="ltr">
-      {ward.vitals.map((k) => {
+    <div ref={box} onKeyDown={onKeyDown} className="grid grid-cols-2 gap-x-3 gap-y-3.5 sm:grid-cols-3" dir="ltr">
+      {ward.vitals.map((k, i) => {
         const def = VITALS[k]
         const level = vitalLevel(k, value[k], ward.population)
+        const tone = level === 'alert' ? '!border-critical text-critical' : level === 'warn' ? '!border-warn text-warn' : ''
+        const id = `vital-${ward.id}-${k}`
+        const isLast = i === ward.vitals.length - 1
         return (
-          <label key={k} className="block">
-            <span className="mb-1 flex items-baseline justify-between gap-2 text-[0.8rem] font-semibold text-ink-2">
-              <span>
-                {def.label} <span className="font-normal text-faint">{def.unit}</span>
-              </span>
-              <span className="text-[0.72rem] font-normal text-muted" dir="rtl">
+          <div key={k} className="min-w-0">
+            <label htmlFor={id} className="mb-1 flex items-baseline justify-between gap-2 text-[0.8rem] font-semibold text-ink-2">
+              <span>{def.label}</span>
+              <span className="truncate text-[0.72rem] font-normal text-muted" dir="rtl">
                 {def.name}
               </span>
-            </span>
-            <input
-              className={`input text-center font-semibold tabular-nums ${level === 'alert' ? '!border-critical text-critical' : level === 'warn' ? '!border-warn text-warn' : ''}`}
-              value={value[k] ?? ''}
-              onChange={(e) => onChange({ ...value, [k]: e.target.value })}
-              placeholder={def.placeholder}
-              inputMode={def.numeric ? 'decimal' : 'text'}
-              maxLength={20}
-            />
-            {last?.[k] && <span className="mt-0.5 block text-[0.7rem] text-faint">السابقة: {last[k]}</span>}
-          </label>
+            </label>
+            {k === 'bp' ? (
+              <BpInput id={id} value={value.bp ?? ''} onChange={(v) => onChange({ ...value, bp: v })} tone={tone} enterLast={isLast} />
+            ) : (
+              <div className="relative">
+                <input
+                  id={id}
+                  className={`input text-center font-semibold tabular-nums ${def.numeric ? 'px-9' : ''} ${tone}`}
+                  value={value[k] ?? ''}
+                  onChange={(e) => onChange({ ...value, [k]: e.target.value })}
+                  placeholder={def.placeholder}
+                  inputMode={def.numeric ? 'decimal' : 'text'}
+                  enterKeyHint={isLast ? 'done' : 'next'}
+                  autoComplete="off"
+                  dir={def.numeric ? 'ltr' : 'auto'}
+                  maxLength={40}
+                />
+                {def.numeric && <span className="pointer-events-none absolute inset-y-0 end-2.5 flex items-center text-[0.7rem] text-faint">{def.unit}</span>}
+              </div>
+            )}
+            {last?.[k] && (
+              <span className="mt-0.5 block truncate text-[0.7rem] text-faint">
+                السابقة: <bdi>{formatVital(k, last[k])}</bdi>
+              </span>
+            )}
+          </div>
         )
       })}
     </div>
@@ -147,7 +303,7 @@ function History({ ward, list, loading }: { ward: Ward; list: Observation[]; loa
                 key={k}
                 type="button"
                 onClick={() => setVital(k)}
-                className={`shrink-0 rounded-md border px-2.5 py-1 text-[0.8rem] font-semibold ${
+                className={`min-h-8 shrink-0 rounded-md border px-2.5 text-[0.8rem] font-semibold ${
                   k === active ? 'border-ink bg-ink text-surface' : 'border-line-strong text-ink-2 hover:border-faint'
                 }`}
               >
@@ -176,8 +332,8 @@ function History({ ward, list, loading }: { ward: Ward; list: Observation[]; loa
               <tr key={o.id}>
                 <td className="whitespace-nowrap px-3 py-2 text-ink-2">{o.at ? shortDateTime(o.at.toDate()) : '—'}</td>
                 {ward.vitals.map((k) => (
-                  <td key={k} className={`px-2 py-2 text-center font-semibold tabular-nums ${LEVEL_TEXT[vitalLevel(k, o.values[k], ward.population)]}`} dir="ltr">
-                    {o.values[k] || <span className="text-faint">—</span>}
+                  <td key={k} className={`px-2 py-2 text-center font-semibold tabular-nums ${LEVEL_TEXT[vitalLevel(k, o.values[k], ward.population)]}`}>
+                    {o.values[k] ? <bdi>{formatVital(k, o.values[k])}</bdi> : <span className="text-faint">—</span>}
                   </td>
                 ))}
                 <td className="max-w-[9rem] truncate px-3 py-2 text-muted">{o.by}</td>
@@ -192,25 +348,48 @@ function History({ ward, list, loading }: { ward: Ward; list: Observation[]; loa
 
 /* ------------------------------ نافذة السرير ------------------------------ */
 
-export function BedSheet({ ward, bed, onClose }: { ward: Ward; bed: Bed | null; onClose: () => void }) {
+export function BedSheet({
+  ward,
+  bed,
+  onClose,
+  initialTab,
+  initialMode,
+  siblings = [],
+  onNavigate,
+}: {
+  ward: Ward
+  bed: Bed | null
+  onClose: () => void
+  /** التبويب الذي تُفتح عليه النافذة (مثلاً "قراءة جديدة" من زر البطاقة) */
+  initialTab?: BedTab
+  /** فتح سرير شاغر مباشرة على نموذج الإدخال */
+  initialMode?: 'admit'
+  /** مرضى الردهة بالترتيب للتنقل بينهم (جولة المرور) */
+  siblings?: Bed[]
+  onNavigate?: (index: number, tab: BedTab) => void
+}) {
   const open = !!bed
   const { role, isAdmin } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const printer = usePrint()
+  const { settings } = useData()
   const unit = UNITS[ward.unit]
   const occupied = hasPatient(bed ?? undefined)
 
   const [mode, setMode] = useState<'view' | 'admit'>('view')
-  const [tab, setTab] = useState<Tab>('info')
+  const [tab, setTab] = useState<BedTab>('info')
   const [patient, setPatient] = useState<PatientData>(EMPTY_PATIENT)
+  const [flags, setFlags] = useState<string[]>([])
   const [status, setStatus] = useState<BedStatus>('occupied')
   const [admitted, setAdmitted] = useState('')
   const [vitals, setVitals] = useState<Vitals>({})
   const [transferOpen, setTransferOpen] = useState(false)
   const [dischargeOpen, setDischargeOpen] = useState(false)
   const [labelEdit, setLabelEdit] = useState<string | null>(null)
-  const initial = useRef<{ patient: PatientData; status: BedStatus; admitted: string; version: number }>({
+  const initial = useRef<{ patient: PatientData; flags: string[]; status: BedStatus; admitted: string; version: number }>({
     patient: EMPTY_PATIENT,
+    flags: [],
     status: 'occupied',
     admitted: '',
     version: 0,
@@ -223,22 +402,24 @@ export function BedSheet({ ward, bed, onClose }: { ward: Ward; bed: Bed | null; 
     const p = patientOf(b)
     const adm = b.admittedAt ? toLocalInput(b.admittedAt.toDate()) : toLocalInput(new Date())
     setPatient(p)
+    setFlags(b.flags)
     setStatus(STATUS[b.status].hasPatient ? b.status : 'occupied')
     setAdmitted(adm)
-    initial.current = { patient: p, status: b.status, admitted: adm, version: b.updatedAt?.toMillis() ?? 0 }
+    initial.current = { patient: p, flags: b.flags, status: b.status, admitted: adm, version: b.updatedAt?.toMillis() ?? 0 }
   }
 
-  // تهيئة النموذج عند فتح سرير أو تغيّر المريض فيه
+  // تهيئة النموذج عند فتح سرير أو الانتقال إلى سرير آخر أو تغيّر المريض فيه
   const key = bed ? `${bed.id}|${bed.admissionId}` : ''
   useEffect(() => {
     if (!bed) return
-    setMode('view')
-    setTab('info')
+    setMode(initialMode === 'admit' && !hasPatient(bed) ? 'admit' : 'view')
+    setTab(initialTab ?? 'info')
     setVitals({})
     setLabelEdit(null)
     if (hasPatient(bed)) loadFromBed(bed)
     else {
       setPatient(EMPTY_PATIENT)
+      setFlags([])
       setStatus('occupied')
       setAdmitted(toLocalInput(new Date()))
     }
@@ -246,16 +427,36 @@ export function BedSheet({ ward, bed, onClose }: { ward: Ward; bed: Bed | null; 
 
   const changed = useMemo(() => {
     const keys = (Object.keys(patient) as (keyof PatientData)[]).filter((k) => patient[k].trim() !== initial.current.patient[k].trim())
-    return { keys, status: status !== initial.current.status, admitted: admitted !== initial.current.admitted }
-  }, [patient, status, admitted])
-  const dirty = changed.keys.length > 0 || changed.status || changed.admitted
+    return { keys, flags: !sameFlags(flags, initial.current.flags), status: status !== initial.current.status, admitted: admitted !== initial.current.admitted }
+  }, [patient, flags, status, admitted])
+  const dirty = changed.keys.length > 0 || changed.flags || changed.status || changed.admitted
   const remoteChanged = occupied && !bed?.pending && dirty && version !== 0 && version !== initial.current.version
+  const vitalsTyped = Object.values(vitals).some((v) => !!v?.replace(/\//g, '').trim())
+  const unsaved = vitalsTyped || (occupied ? dirty : mode === 'admit' && (Object.values(patient).some((v) => v.trim() !== '') || flags.length > 0))
 
   if (!bed) return null
   const label = bedLabel(bed)
   const admittedDate = bed.admittedAt?.toDate() ?? null
 
+  // التنقل بين مرضى الردهة
+  const pos = occupied ? siblings.findIndex((b) => b.id === bed.id) : -1
+  const prev = pos > 0 ? siblings[pos - 1] : null
+  const next = pos >= 0 && pos < siblings.length - 1 ? siblings[pos + 1] : null
+
   /* ---------- الإجراءات ---------- */
+
+  /** تأكيد قبل فقدان بيانات مُدخلة لم تُحفظ */
+  const guard = async () =>
+    !unsaved ||
+    confirm({ title: 'تجاهل البيانات غير المحفوظة؟', message: 'أدخلت بيانات لم تُحفظ بعد، وستُفقد إذا تابعت.', confirmLabel: 'تجاهل', danger: true })
+
+  const requestClose = async () => {
+    if (await guard()) onClose()
+  }
+
+  const go = async (target: Bed) => {
+    if (onNavigate && (await guard())) onNavigate(target.index, tab)
+  }
 
   const fail = () => toast('تعذّر الحفظ — تحقق من الاتصال أو الصلاحيات', 'error')
   const saved = (msg: string) => toast(navigator.onLine ? msg : 'حُفظ على الجهاز — ستتم المزامنة عند عودة الإنترنت', navigator.onLine ? 'success' : 'info')
@@ -264,7 +465,7 @@ export function BedSheet({ ward, bed, onClose }: { ward: Ward; bed: Bed | null; 
     e.preventDefault()
     if (!role) return
     if (!patient.patientName.trim()) return toast('يرجى إدخال اسم المريض', 'error')
-    admitPatient(ward, bed, { ...patient, status, admittedAt: fromLocalInput(admitted) ?? new Date() }, vitals, role).catch(fail)
+    admitPatient(ward, bed, { ...patient, flags, status, admittedAt: fromLocalInput(admitted) ?? new Date() }, vitals, role).catch(fail)
     saved(`تم إدخال ${patient.patientName.trim()}`)
     onClose()
   }
@@ -273,8 +474,9 @@ export function BedSheet({ ward, bed, onClose }: { ward: Ward; bed: Bed | null; 
     if (!role) return
     if (!dirty) return onClose()
     if (!patient.patientName.trim()) return toast('اسم المريض مطلوب', 'error')
-    const patch: Partial<PatientData> & { status?: BedStatus; admittedAt?: Date } = {}
+    const patch: Partial<PatientData> & { status?: BedStatus; admittedAt?: Date; flags?: string[] } = {}
     for (const k of changed.keys) (patch as Record<string, string>)[k] = patient[k]
+    if (changed.flags) patch.flags = flags
     if (changed.status) patch.status = status
     if (changed.admitted) patch.admittedAt = fromLocalInput(admitted) ?? undefined
     updatePatient(ward, bed, patch, role).catch(fail)
@@ -282,13 +484,18 @@ export function BedSheet({ ward, bed, onClose }: { ward: Ward; bed: Bed | null; 
     onClose()
   }
 
-  const submitVitals = () => {
+  const submitVitals = (andNext: boolean) => {
     if (!role) return
-    if (!Object.values(vitals).some((v) => v?.trim())) return toast('أدخل قيمة واحدة على الأقل', 'error')
+    if (!vitalsTyped) return toast('أدخل قيمة واحدة على الأقل', 'error')
     recordVitals(ward, bed, vitals, role).catch(fail)
-    saved('تم تسجيل القراءة')
     setVitals({})
-    setTab('history')
+    if (andNext && next && onNavigate) {
+      saved(`تم تسجيل قراءة ${unit.one} ${label}`)
+      onNavigate(next.index, 'vitals')
+    } else {
+      saved('تم تسجيل القراءة')
+      setTab('history')
+    }
   }
 
   const changeFreeStatus = (s: BedStatus) => {
@@ -304,18 +511,33 @@ export function BedSheet({ ward, bed, onClose }: { ward: Ward; bed: Bed | null; 
   }
 
   const printSummary = () =>
-    printer.pdf(<PatientDoc ward={ward} bed={bed} observations={observations} />, `DrTJPH-Patient-${ward.id}-${label}`)
+    printer.pdf(<PatientDoc ward={ward} bed={bed} observations={observations} flags={settings.flags} />, `DrTJPH-Patient-${ward.id}-${label}`)
 
   /* ---------- العرض ---------- */
 
   const title = (
-    <span className="flex flex-wrap items-center gap-2">
+    <span className="flex flex-wrap items-center gap-x-2">
       <span>
         {unit.one} <span className="num">{label}</span>
       </span>
       <span className="text-[0.85rem] font-semibold text-muted">· {ward.name}</span>
     </span>
   )
+
+  const navigator_ =
+    pos >= 0 && onNavigate && siblings.length > 1 ? (
+      <div className="flex shrink-0 items-center">
+        <button type="button" className="btn btn-ghost btn-sm btn-icon" disabled={!prev} onClick={() => prev && go(prev)} aria-label="المريض السابق">
+          <ChevronRight size={18} />
+        </button>
+        <span className="num min-w-[2.4rem] text-center text-[0.76rem] font-semibold text-muted">
+          {pos + 1}/{siblings.length}
+        </span>
+        <button type="button" className="btn btn-ghost btn-sm btn-icon" disabled={!next} onClick={() => next && go(next)} aria-label="المريض التالي">
+          <ChevronLeft size={18} />
+        </button>
+      </div>
+    ) : null
 
   let body: ReactNode
   let footer: ReactNode = null
@@ -377,7 +599,7 @@ export function BedSheet({ ward, bed, onClose }: { ward: Ward; bed: Bed | null; 
   } else if (!occupied) {
     body = (
       <form id="admit-form" onSubmit={submitAdmit} className="space-y-4">
-        <PatientFields ward={ward} value={patient} onChange={setPatient} />
+        <PatientFields ward={ward} value={patient} onChange={setPatient} flags={flags} onFlags={setFlags} />
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="تاريخ ووقت الدخول">
             <input className="input" type="datetime-local" value={admitted} onChange={(e) => setAdmitted(e.target.value)} />
@@ -404,31 +626,50 @@ export function BedSheet({ ward, bed, onClose }: { ward: Ward; bed: Bed | null; 
           <UserPlus size={17} />
           إدخال المريض
         </button>
-        <button type="button" className="btn btn-secondary" onClick={() => setMode('view')}>
-          رجوع
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={async () => {
+            if (initialMode === 'admit') return requestClose()
+            if (await guard()) setMode('view')
+          }}
+        >
+          {initialMode === 'admit' ? 'إلغاء' : 'رجوع'}
         </button>
       </div>
     )
   } else {
     const day = stayDay(admittedDate)
+    const due = vitalsDue(ward, bed)
     body = (
       <div>
-        <div className="mb-4 grid grid-cols-3 overflow-hidden rounded-lg border border-line text-[0.8rem]">
-          <div className="px-3 py-2">
+        <div className="mb-3 grid grid-cols-3 overflow-hidden rounded-lg border border-line text-[0.8rem]">
+          <div className="min-w-0 px-3 py-2">
             <div className="text-muted">الحالة</div>
             <StatusTag status={bed.status} className="mt-0.5" />
           </div>
-          <div className="border-s border-line px-3 py-2">
+          <div className="min-w-0 border-s border-line px-3 py-2">
             <div className="text-muted">مدة الرقود</div>
-            <div className="font-bold text-ink">{day ? stayLength(day) : '—'}</div>
+            <div className="truncate font-bold text-ink">{day ? stayLength(day) : '—'}</div>
           </div>
-          <div className="border-s border-line px-3 py-2">
+          <div className="min-w-0 border-s border-line px-3 py-2">
             <div className="text-muted">آخر قراءة</div>
-            <div className="truncate font-bold text-ink">{bed.vitalsAt ? timeAgo(bed.vitalsAt.toDate()) : '—'}</div>
+            <div className={`truncate font-bold ${due === 'late' ? 'text-critical' : due === 'due' ? 'text-warn' : 'text-ink'}`}>
+              {bed.vitalsAt ? agoShort(bed.vitalsAt.toDate()) : '—'}
+            </div>
           </div>
         </div>
 
-        <Tabs<Tab>
+        {hasAllergy(bed.allergies) && (
+          <div className="mb-3 flex items-start gap-2 rounded-md border border-critical/30 bg-critical-soft px-3 py-2 text-[0.86rem] font-semibold text-critical">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+            <span>
+              حساسية: <bdi>{bed.allergies}</bdi>
+            </span>
+          </div>
+        )}
+
+        <Tabs<BedTab>
           value={tab}
           onChange={setTab}
           className="mb-4"
@@ -467,7 +708,7 @@ export function BedSheet({ ward, bed, onClose }: { ward: Ward; bed: Bed | null; 
                 }))}
               />
             </div>
-            <PatientFields ward={ward} value={patient} onChange={setPatient} />
+            <PatientFields ward={ward} value={patient} onChange={setPatient} flags={flags} onFlags={setFlags} />
             <Field label="تاريخ ووقت الدخول">
               <input className="input" type="datetime-local" value={admitted} onChange={(e) => setAdmitted(e.target.value)} />
             </Field>
@@ -484,7 +725,7 @@ export function BedSheet({ ward, bed, onClose }: { ward: Ward; bed: Bed | null; 
               تُحفظ كل قراءة في سجل المريض مع الوقت واسم من سجّلها.
               {bed.vitalsAt && ` آخر قراءة: ${shortDateTime(bed.vitalsAt.toDate())}${bed.vitalsBy ? ` — ${bed.vitalsBy}` : ''}.`}
             </p>
-            <VitalsInputs ward={ward} value={vitals} onChange={setVitals} last={bed.vitals} />
+            <VitalsInputs ward={ward} value={vitals} onChange={setVitals} last={bed.vitals} focusKey={initialTab === 'vitals' ? key : undefined} />
             <p className="text-[0.72rem] text-faint">التلوين تنبيه بصري للقيم خارج المدى المعتاد ولا يغني عن التقييم السريري.</p>
           </div>
         )}
@@ -493,18 +734,8 @@ export function BedSheet({ ward, bed, onClose }: { ward: Ward; bed: Bed | null; 
       </div>
     )
 
-    footer = (
-      <div className="flex flex-wrap items-center gap-2">
-        {tab === 'info' && (
-          <button type="button" className="btn btn-primary" onClick={submitInfo} disabled={!dirty}>
-            حفظ التعديلات
-          </button>
-        )}
-        {tab === 'vitals' && (
-          <button type="button" className="btn btn-primary" onClick={submitVitals}>
-            حفظ القراءة
-          </button>
-        )}
+    const secondary = (
+      <>
         <span className="flex-1" />
         <button type="button" className="btn btn-secondary btn-sm" onClick={printSummary} disabled={printer.busy}>
           <FileText size={15} />
@@ -518,18 +749,45 @@ export function BedSheet({ ward, bed, onClose }: { ward: Ward; bed: Bed | null; 
           <LogOut size={15} />
           إخراج
         </button>
-      </div>
+      </>
     )
+
+    footer =
+      tab === 'vitals' ? (
+        <div className="flex gap-2">
+          <button type="button" className="btn btn-primary flex-1 sm:flex-none" onClick={() => submitVitals(false)}>
+            حفظ القراءة
+          </button>
+          {next && onNavigate && (
+            <button type="button" className="btn btn-secondary flex-1 sm:flex-none" onClick={() => submitVitals(true)}>
+              <span>
+                حفظ والتالي <span className="font-normal text-muted">({`${unit.one} ${bedLabel(next)}`})</span>
+              </span>
+              <ChevronLeft size={16} />
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          {tab === 'info' && (
+            <button type="button" className="btn btn-primary" onClick={submitInfo} disabled={!dirty}>
+              حفظ التعديلات
+            </button>
+          )}
+          {secondary}
+        </div>
+      )
   }
 
   return (
     <>
       <Sheet
         open={open}
-        onClose={onClose}
+        onClose={requestClose}
         size="lg"
         title={title}
         subtitle={occupied ? bed.patientName : mode === 'admit' ? 'إدخال مريض جديد' : STATUS[bed.status].label}
+        headerExtra={navigator_}
         footer={footer}
       >
         {body}
@@ -697,7 +955,7 @@ function DischargeSheet({ open, onClose, ward, bed, onDone }: { open: boolean; o
           <legend className="field-label">نوع الخروج</legend>
           <div className="space-y-1.5">
             {DISCHARGE_TYPES.map((t) => (
-              <label key={t} className={`flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-[0.9rem] ${type === t ? 'border-ink' : 'border-line'}`}>
+              <label key={t} className={`flex min-h-11 cursor-pointer items-center gap-2.5 rounded-md border px-3 text-[0.9rem] ${type === t ? 'border-ink' : 'border-line'}`}>
                 <input type="radio" name="dtype" checked={type === t} onChange={() => setType(t)} className="accent-[var(--brand)]" />
                 {t}
               </label>
@@ -705,7 +963,7 @@ function DischargeSheet({ open, onClose, ward, bed, onDone }: { open: boolean; o
           </div>
         </fieldset>
         <Field label="ملاحظة (اختياري)">
-          <textarea className="input" rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} />
+          <textarea className="input" rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} dir="auto" />
         </Field>
         <div>
           <span className="field-label">حالة {UNITS[ward.unit].the} بعد الخروج</span>

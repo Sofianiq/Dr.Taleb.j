@@ -7,9 +7,10 @@ import { deleteArchived, reorderWards, saveSettings } from '../data/actions'
 import { useAuth } from '../data/auth'
 import { useActivity, useArchive, useCensus, useData } from '../data/store'
 import type { Department, Ward } from '../data/types'
-import { deptLetter, UNITS, unitCount, VITALS } from '../lib/constants'
+import { deptLetter, UNITS, unitCount, VITALS, VITALS_EVERY_OPTIONS } from '../lib/constants'
 import { AR_MONTHS, AR_WEEKDAYS, dateTime, stayDay, stayLength } from '../lib/dates'
 import { shortId } from '../lib/ids'
+import { matchesQuery, patientsCount } from '../lib/text'
 import { ActivityList, ListRowControls, moveItem } from './Admin'
 
 const BACK = { to: '/admin', label: 'الإدارة' }
@@ -56,7 +57,8 @@ export function WardsManagerPage() {
                     <span className="shrink-0 text-[0.78rem] text-muted">{unitCount(w.beds, w.unit)}</span>
                   </div>
                   <div className="truncate text-[0.76rem] text-muted">
-                    {byWard[w.id]?.patients ?? 0} مريض حالياً · {w.population === 'neonate' ? 'حديثو الولادة' : 'بالغون وأطفال'} · {w.procedureLabel}
+                    حالياً: {patientsCount(byWard[w.id]?.patients ?? 0)} · {w.population === 'neonate' ? 'حديثو الولادة' : 'بالغون وأطفال'} · {w.procedureLabel} · القياس:{' '}
+                    {VITALS_EVERY_OPTIONS.find((o) => o.value === w.vitalsEvery)?.label ?? `كل ${w.vitalsEvery} ساعات`}
                   </div>
                   <div className="truncate text-[0.74rem] text-faint" dir="ltr" style={{ textAlign: 'right' }}>
                     {w.vitals.map((k) => VITALS[k].label).join(' · ') || '—'}
@@ -258,14 +260,14 @@ export function ArchivePage() {
   const toast = useToast()
   const [q, setQ] = useState('')
   const needle = q.trim()
-  const filtered = needle ? list.filter((p) => [p.patientName, p.doctorName, p.procedure, p.wardName].some((f) => f.includes(needle))) : list
+  const filtered = needle ? list.filter((p) => matchesQuery(needle, [p.patientName, p.doctorName, p.procedure, p.wardName])) : list
 
   return (
     <div>
       <PageHeader back={BACK} title="سجل المرضى المُخرَجين" subtitle="آخر ٢٠٠ حالة خروج" />
       <div className="relative mb-3">
         <Search size={17} className="pointer-events-none absolute inset-y-0 start-3 my-auto text-faint" />
-        <input className="input ps-9" placeholder="بحث بالاسم أو الطبيب أو الردهة" value={q} onChange={(e) => setQ(e.target.value)} type="search" />
+        <input className="input ps-9" placeholder="بحث بالاسم أو الطبيب أو الردهة" value={q} onChange={(e) => setQ(e.target.value)} type="search" enterKeyHint="search" />
       </div>
       <div className="panel overflow-hidden">
         {loading ? (
