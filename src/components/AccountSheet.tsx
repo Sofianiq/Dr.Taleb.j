@@ -24,6 +24,23 @@ export function applyStoredTheme() {
   else document.documentElement.dataset.theme = t
 }
 
+/* حجم الخط: يكبّر كل عناصر التطبيق بنسبة ثابتة (مفيد لضعاف البصر والشاشات الصغيرة) */
+type TextSize = 'normal' | 'large' | 'xlarge'
+const TEXT_SCALE: Record<TextSize, string> = { normal: '', large: '112.5%', xlarge: '125%' }
+
+function readTextSize(): TextSize {
+  try {
+    const t = localStorage.getItem('text-size')
+    return t === 'large' || t === 'xlarge' ? t : 'normal'
+  } catch {
+    return 'normal'
+  }
+}
+
+export function applyStoredTextSize() {
+  document.documentElement.style.fontSize = TEXT_SCALE[readTextSize()]
+}
+
 function Row({ icon, label, hint, onClick, danger }: { icon: ReactNode; label: string; hint?: string; onClick: () => void; danger?: boolean }) {
   return (
     <button type="button" onClick={onClick} className="flex w-full items-center gap-3 px-4 py-3 text-start hover:bg-surface-2">
@@ -41,6 +58,7 @@ export function AccountSheet({ open, onClose, role }: { open: boolean; onClose: 
   const [pwFor, setPwFor] = useState<Role | null>(null)
   const [installOpen, setInstallOpen] = useState(false)
   const [theme, setTheme] = useState<Theme>(readTheme)
+  const [textSize, setTextSize] = useState<TextSize>(readTextSize)
   const operator = useOperatorName()
   const [name, setName] = useState(operator)
   const pwa = usePwa()
@@ -60,6 +78,16 @@ export function AccountSheet({ open, onClose, role }: { open: boolean; onClose: 
     }
     applyStoredTheme()
   }, [theme])
+
+  useEffect(() => {
+    try {
+      if (textSize === 'normal') localStorage.removeItem('text-size')
+      else localStorage.setItem('text-size', textSize)
+    } catch {
+      /* التخزين غير متاح */
+    }
+    applyStoredTextSize()
+  }, [textSize])
 
   const doLogout = async () => {
     const ok = await confirm({ title: 'تسجيل الخروج', message: 'هل تريد تسجيل الخروج من التطبيق على هذا الجهاز؟', confirmLabel: 'خروج', danger: true })
@@ -113,6 +141,20 @@ export function AccountSheet({ open, onClose, role }: { open: boolean; onClose: 
               { value: 'auto', label: 'تلقائي' },
               { value: 'light', label: 'فاتح' },
               { value: 'dark', label: 'داكن' },
+            ]}
+          />
+        </div>
+
+        <div className="mb-4">
+          <div className="field-label">حجم الخط</div>
+          <Segmented<TextSize>
+            value={textSize}
+            onChange={setTextSize}
+            className="w-full"
+            options={[
+              { value: 'normal', label: 'عادي' },
+              { value: 'large', label: 'كبير' },
+              { value: 'xlarge', label: 'أكبر' },
             ]}
           />
         </div>

@@ -20,8 +20,11 @@ service cloud.firestore {
     function mapField(field, maxKeys) {
       return !(field in data()) || (data()[field] is map && data()[field].size() <= maxKeys);
     }
+    function listField(field, maxItems) {
+      return !(field in data()) || (data()[field] is list && data()[field].size() <= maxItems);
+    }
 
-    // إعدادات عامة: مناصب الخفارة، الأقسام، وقت بدء الخفارة
+    // إعدادات عامة: مناصب الخفارة، الأقسام، العلامات السريعة للمرضى، وقت بدء الخفارة
     match /settings/{docId} {
       allow read: if isMember();
       allow write: if isAdmin();
@@ -45,9 +48,9 @@ service cloud.firestore {
       return smallDoc()
         && str('patientName', 120) && str('age', 20) && str('sex', 10) && str('doctorName', 120)
         && str('procedure', 200) && str('familyPhone', 30) && str('notes', 3000) && str('label', 20)
-        && str('admissionId', 40) && str('updatedBy', 120) && str('vitalsBy', 120)
+        && str('allergies', 300) && str('admissionId', 40) && str('updatedBy', 120) && str('vitalsBy', 120)
         && (!('status' in data()) || data().status in ['occupied', 'critical', 'discharge', 'empty', 'reserved', 'cleaning'])
-        && mapField('vitals', 12);
+        && mapField('vitals', 12) && listField('flags', 12);
     }
     // تغيير رقم السرير المعروض للإدارة فقط
     function labelUnchanged() {

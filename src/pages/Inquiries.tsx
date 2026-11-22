@@ -8,6 +8,7 @@ import type { Bed, Ward } from '../data/types'
 import { UNITS } from '../lib/constants'
 import { currentShiftDate, longDate, stayDay } from '../lib/dates'
 import { isValidPhone, whatsappUrl } from '../lib/phone'
+import { matchesQuery, patientsCount } from '../lib/text'
 import { findContactByName } from './Staff'
 
 export function InquiriesPage() {
@@ -22,9 +23,7 @@ export function InquiriesPage() {
   }, [wards, beds])
 
   const needle = q.trim()
-  const results = needle
-    ? patients.filter(({ bed }) => [bed.patientName, bed.doctorName, bed.procedure].some((f) => f.includes(needle)))
-    : patients
+  const results = needle ? patients.filter(({ bed }) => matchesQuery(needle, [bed.patientName, bed.doctorName, bed.procedure])) : patients
 
   const desk = contacts.filter((c) => c.dept === 'inquiries' || c.dept === 'administration')
   const onCall = settings.positions.map((p) => ({ ...p, name: today.assignments[p.id] ?? '' }))
@@ -41,6 +40,7 @@ export function InquiriesPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           type="search"
+          enterKeyHint="search"
           aria-label="بحث عن مريض"
         />
       </div>
@@ -57,7 +57,7 @@ export function InquiriesPage() {
         </div>
       )}
 
-      <SectionHeader title={needle ? 'نتائج البحث' : 'المرضى الحاليون'} meta={`${results.length} مريض`} />
+      <SectionHeader title={needle ? 'نتائج البحث' : 'المرضى الحاليون'} meta={patientsCount(results.length)} />
       <div className="panel mb-7 overflow-hidden">
         {results.length === 0 ? (
           <EmptyState title={needle ? 'لا يوجد مريض بهذا الاسم' : 'لا يوجد مرضى راقدون حالياً'}>

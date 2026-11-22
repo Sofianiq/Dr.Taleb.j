@@ -1,12 +1,13 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Suspense, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { AlertTriangle, Building2, CalendarClock, CloudOff, Info, RefreshCw, Stethoscope, Users } from 'lucide-react'
 import { useAuth } from '../data/auth'
-import { useData } from '../data/store'
-import { HOSPITAL_SHORT, MANAGED_BY, ROLE_LABEL } from '../lib/constants'
-import { markOperatorPrompted, operatorPrompted, setOperatorName, useOperatorName } from '../lib/operator'
+import { bedLabel, useData } from '../data/store'
+import type { BedStatus } from '../data/types'
+import { HOSPITAL_SHORT, MANAGED_BY, ROLE_LABEL, UNITS } from '../lib/constants'
+import { markOperatorPrompted, operatorLabel, operatorPrompted, setOperatorName, useOperatorName } from '../lib/operator'
 import { usePwa } from '../lib/pwa'
-import { Field, Logo, Sheet } from './ui'
+import { Field, Logo, Sheet, Spinner, useToast } from './ui'
 import { AccountSheet } from './AccountSheet'
 
 const NAV: { to: string; label: string; icon: (s: number) => ReactNode }[] = [
@@ -63,6 +64,71 @@ function SyncIndicator({ compact = false }: { compact?: boolean }) {
       <span className={compact && live ? 'sr-only' : ''}>{compact && live ? label : online ? (live ? 'متصل' : label) : label}</span>
     </span>
   )
+}
+
+const RECENT = 10 * 60_000
+
+/** الانتقال من التنبيه: إن كنا في الصفحة نفسها نستبدل الإدخال بدل إضافة إدخال مكرر إلى سجل الرجوع */
+const samePage = (path: string) => window.location.hash.replace(/^#/, '').split('?')[0] === path.split('?')[0]
+
+/**
+ * تنبيه لحظي على جميع الأجهزة المفتوحة عند تحوّل حالة مريض إلى «حرج» أو نشر تبليغ عاجل من جهاز آخر.
+ * لا يُنبَّه الجهاز الذي أجرى التعديل، ولا يُنبَّه عن أحداث قديمة.
+ */
+function LiveAlerts() {
+  const { beds, bedsReady, wards, announcements, status } = useData()
+  const { role } = useAuth()
+  const toast = useToast()
+  const navigate = useNavigate()
+  const seenBeds = useRef<Record<string, BedStatus> | null>(null)
+  const seenAnnouncements = useRef<Set<string> | null>(null)
+
+  useEffect(() => {
+    if (!bedsReady) {
+      seenBeds.current = null
+      return
+    }
+    const prev = seenBeds.current
+    const next: Record<string, BedStatus> = {}
+    for (const id in beds) next[id] = beds[id].status
+    seenBeds.current = next
+    if (!prev) return
+    for (const id in beds) {
+      const b = beds[id]
+      if (b.status !== 'critical' || prev[id] === 'critical' || b.pending) continue
+      if (Date.now() - (b.updatedAt?.toMillis() ?? 0) > RECENT) continue
+      const ward = wards.find((w) => w.id === b.wardId)
+      if (!ward) continue
+      toast(`حالة حرجة: ${b.patientName} — ${ward.name}، ${UNITS[ward.unit].one} ${bedLabel(b)}`, 'alert', {
+        action: {
+          label: 'عرض',
+          onClick: () => {
+            const to = `/resident/ward/${ward.id}?bed=${b.index}`
+            navigate(to, { replace: samePage(to) })
+          },
+        },
+      })
+      navigator.vibrate?.([180, 90, 180])
+    }
+  }, [beds, bedsReady, wards, toast, navigate])
+
+  useEffect(() => {
+    if (!status.loaded) {
+      seenAnnouncements.current = null
+      return
+    }
+    const prev = seenAnnouncements.current
+    seenAnnouncements.current = new Set(announcements.map((a) => a.id))
+    if (!prev || !role) return
+    for (const a of announcements) {
+      if (prev.has(a.id) || a.level !== 'urgent' || a.author === operatorLabel(role)) continue
+      if (Date.now() - (a.createdAt?.toMillis() ?? 0) > RECENT) continue
+      toast(`تبليغ عاجل: ${a.title}`, 'alert', { action: { label: 'عرض', onClick: () => navigate('/admin', { replace: samePage('/admin') }) } })
+      navigator.vibrate?.([180, 90, 180])
+    }
+  }, [announcements, status.loaded, role, toast, navigate])
+
+  return null
 }
 
 function initials(name: string) {
@@ -181,7 +247,15 @@ export function AppShell() {
         )}
 
         <main className="mx-auto max-w-6xl px-4 pt-5 lg:px-8 lg:pt-8">
-          <Outlet />
+          <Suspense
+            fallback={
+              <div className="grid place-items-center py-24 text-brand">
+                <Spinner size={22} />
+              </div>
+            }
+          >
+            <Outlet />
+          </Suspense>
         </main>
       </div>
 
@@ -203,7 +277,7 @@ export function AppShell() {
                 <>
                   {isActive && <span className="absolute inset-x-4 top-0 h-[2px] rounded-b bg-brand" />}
                   {item.icon(21)}
-                  <span className={`text-[0.68rem] leading-none ${isActive ? 'font-bold' : 'font-medium'}`}>{item.label}</span>
+                  <span className={`whitespace-nowrap text-[11px] leading-none ${isActive ? 'font-bold' : 'font-medium'}`}>{item.label}</span>
                 </>
               )}
             </NavLink>
@@ -211,6 +285,7 @@ export function AppShell() {
         </div>
       </nav>
 
+      <LiveAlerts />
       <AccountSheet open={accountOpen} onClose={() => setAccountOpen(false)} role={role} />
       <OperatorPrompt
         open={askName}

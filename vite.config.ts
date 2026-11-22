@@ -23,7 +23,8 @@ export default defineConfig({
         start_url: './',
         scope: './',
         display: 'standalone',
-        orientation: 'portrait',
+        // الهاتف يتبع قفل التدوير في الجهاز، والجهاز اللوحي يعمل أفقياً وعمودياً
+        orientation: 'any',
         theme_color: '#0d6b42',
         background_color: '#f3f7f4',
         categories: ['medical', 'health', 'productivity'],

@@ -12,9 +12,10 @@ import {
   type WriteBatch,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
-import { EMPTY_PATIENT, STATUS, UNITS, VITAL_ORDER } from '../lib/constants'
+import { EMPTY_PATIENT, MAX_FLAGS, STATUS, UNITS, VITAL_ORDER } from '../lib/constants'
 import { newAdmissionId } from '../lib/ids'
 import { operatorLabel } from '../lib/operator'
+import { cleanVitalValue } from '../lib/vitals'
 import { bedLabel } from './store'
 import type {
   ActivityAction,
@@ -42,11 +43,13 @@ type Vitals = Partial<Record<VitalKey, string>>
 function cleanVitals(values: Vitals): Vitals {
   const out: Vitals = {}
   for (const k of VITAL_ORDER) {
-    const v = values[k]?.trim()
+    const v = cleanVitalValue(k, values[k])
     if (v) out[k] = v
   }
   return out
 }
+
+const cleanFlags = (flags: string[]) => [...new Set(flags)].slice(0, MAX_FLAGS)
 
 function cleanPatient(p: Partial<PatientData>): Partial<PatientData> {
   const out: Record<string, string> = {}
@@ -69,6 +72,7 @@ function logActivity(batch: WriteBatch, role: Role, action: ActivityAction, text
 
 const CLEARED = {
   ...EMPTY_PATIENT,
+  flags: [],
   admissionId: '',
   admittedAt: null,
   vitals: {},
@@ -85,6 +89,7 @@ const bedBase = (bed: Bed) => ({ wardId: bed.wardId, index: bed.index, label: be
 export interface AdmitInput extends PatientData {
   status: BedStatus
   admittedAt: Date
+  flags: string[]
 }
 
 /** إدخال مريض جديد إلى سرير */
@@ -94,11 +99,12 @@ export function admitPatient(ward: Ward, bed: Bed, input: AdmitInput, vitals: Vi
   const by = operatorLabel(role)
   const v = cleanVitals(vitals)
   const hasVitals = Object.keys(v).length > 0
-  const { status, admittedAt, ...patient } = input
+  const { status, admittedAt, flags, ...patient } = input
   batch.set(bedRef(bed), {
     ...bedBase(bed),
     ...CLEARED,
     ...cleanPatient(patient),
+    flags: cleanFlags(flags),
     status: STATUS[status].hasPatient ? status : 'occupied',
     admissionId,
     admittedAt: Timestamp.fromDate(admittedAt),
@@ -119,11 +125,11 @@ export function admitPatient(ward: Ward, bed: Bed, input: AdmitInput, vitals: Vi
 export function updatePatient(
   ward: Ward,
   bed: Bed,
-  patch: Partial<PatientData> & { status?: BedStatus; admittedAt?: Date },
+  patch: Partial<PatientData> & { status?: BedStatus; admittedAt?: Date; flags?: string[] },
   role: Role,
 ): Promise<void> {
   const batch = writeBatch(db)
-  const { status, admittedAt, ...patient } = patch
+  const { status, admittedAt, flags, ...patient } = patch
   const data: Record<string, unknown> = {
     ...bedBase(bed),
     ...cleanPatient(patient),
@@ -132,9 +138,10 @@ export function updatePatient(
   }
   if (status) data.status = status
   if (admittedAt) data.admittedAt = Timestamp.fromDate(admittedAt)
+  if (flags) data.flags = cleanFlags(flags)
   batch.set(bedRef(bed), data, { merge: true })
   const name = clean(patch.patientName ?? bed.patientName)
-  const onlyStatus = status && Object.keys(patient).length === 0 && !admittedAt
+  const onlyStatus = status && Object.keys(patient).length === 0 && !admittedAt && !flags
   if (onlyStatus) {
     logActivity(batch, role, 'status', `حالة ${name}: «${STATUS[status].label}»`, ward.name, name)
   } else {
@@ -190,7 +197,9 @@ export function transferPatient(fromWard: Ward, from: Bed, toWard: Ward, to: Bed
     doctorName: from.doctorName,
     procedure: from.procedure,
     familyPhone: from.familyPhone,
+    allergies: from.allergies,
     notes: from.notes,
+    flags: from.flags,
     status: from.status,
     admissionId: from.admissionId,
     admittedAt: from.admittedAt,
@@ -229,6 +238,7 @@ export function dischargePatient(
     doctorName: bed.doctorName,
     procedure: bed.procedure,
     familyPhone: bed.familyPhone,
+    allergies: bed.allergies,
     notes: bed.notes,
     vitals: bed.vitals,
     admittedAt: bed.admittedAt,
@@ -252,6 +262,7 @@ const wardDoc = (w: Ward) => ({
   procedureLabel: clean(w.procedureLabel),
   vitals: w.vitals,
   population: w.population,
+  vitalsEvery: w.vitalsEvery,
 })
 
 /** عند أول تعديل: حفظ الردهات الافتراضية فعلياً في قاعدة البيانات */

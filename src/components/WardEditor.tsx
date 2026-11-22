@@ -4,7 +4,7 @@ import { deleteWard, saveWard } from '../data/actions'
 import { useAuth } from '../data/auth'
 import { hasPatient, useData, wardBeds } from '../data/store'
 import type { Population, UnitKind, VitalKey, Ward } from '../data/types'
-import { MAX_BEDS, PROCEDURE_LABELS, UNITS, VITAL_ORDER, VITALS } from '../lib/constants'
+import { defaultVitalsEvery, MAX_BEDS, PROCEDURE_LABELS, UNITS, VITAL_ORDER, VITALS, VITALS_EVERY_OPTIONS } from '../lib/constants'
 import { shortId } from '../lib/ids'
 import { Field, Segmented, Sheet, useConfirm, useToast } from './ui'
 
@@ -15,6 +15,7 @@ const BLANK: Omit<Ward, 'id' | 'order'> = {
   procedureLabel: 'التشخيص',
   vitals: ['bp', 'pulse', 'spo2', 'temp'],
   population: 'adult',
+  vitalsEvery: defaultVitalsEvery('adult'),
 }
 
 /** إضافة ردهة أو تعديلها (للإدارة فقط) */
@@ -30,7 +31,19 @@ export function WardEditor({ open, onClose, ward }: { open: boolean; onClose: ()
   useEffect(() => {
     if (!open) return
     setError('')
-    setForm(ward ? { name: ward.name, unit: ward.unit, beds: ward.beds, procedureLabel: ward.procedureLabel, vitals: ward.vitals, population: ward.population } : BLANK)
+    setForm(
+      ward
+        ? {
+            name: ward.name,
+            unit: ward.unit,
+            beds: ward.beds,
+            procedureLabel: ward.procedureLabel,
+            vitals: ward.vitals,
+            population: ward.population,
+            vitalsEvery: ward.vitalsEvery,
+          }
+        : BLANK,
+    )
   }, [open, ward])
 
   const occupiedIndexes = ward ? wardBeds(ward, beds).filter(hasPatient).map((b) => b.index) : []
@@ -159,6 +172,15 @@ export function WardEditor({ open, onClose, ward }: { open: boolean; onClose: ()
             )}
           </Field>
         </div>
+        <Field label="تكرار قياس العلامات الحيوية" hint="تُعلَّم بطاقة المريض «حان موعد القياس» عند مرور هذه المدة على آخر قراءة">
+          <select className="input" value={form.vitalsEvery} onChange={(e) => setForm({ ...form, vitalsEvery: Number(e.target.value) })}>
+            {VITALS_EVERY_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </Field>
         <fieldset>
           <legend className="field-label">العلامات الحيوية المتابَعة في هذه الردهة</legend>
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">

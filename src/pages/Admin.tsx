@@ -2,15 +2,16 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
 import { Link } from 'react-router-dom'
 import { ChevronLeft, Plus, Trash2 } from 'lucide-react'
 import { ChangePasswordSheet } from '../components/AccountSheet'
-import { EmptyState, Field, MetricStrip, PageHeader, SectionHeader, Segmented, Sheet, StatusTag, useConfirm, useToast } from '../components/ui'
+import { EmptyState, Field, FLAG_CHIP, FLAG_DOT, MetricStrip, PageHeader, SectionHeader, Segmented, Sheet, StatusTag, useConfirm, useToast } from '../components/ui'
 import { addAnnouncement, deleteAnnouncement, saveSettings } from '../data/actions'
 import { useAuth } from '../data/auth'
 import { bedLabel, hasPatient, useActivity, useArchive, useCensus, useData, wardBeds } from '../data/store'
-import type { Activity, AnnouncementLevel, Position, Role } from '../data/types'
+import type { Activity, AnnouncementLevel, FlagTone, PatientFlag, Position, Role } from '../data/types'
 import { logout } from '../lib/auth'
-import { ACCOUNTS, HOSPITAL_AR, MANAGED_BY, UNITS } from '../lib/constants'
+import { ACCOUNTS, FLAG_TONES, HOSPITAL_AR, MANAGED_BY, MAX_FLAGS, UNITS } from '../lib/constants'
 import { clock, isToday, timeAgo } from '../lib/dates'
 import { shortId } from '../lib/ids'
+import { patientsCount } from '../lib/text'
 
 export const LEVELS: Record<AnnouncementLevel, { label: string; cls: string; bar: string }> = {
   normal: { label: 'عادي', cls: 'bg-surface-3 text-muted', bar: 'border-s-line-strong' },
@@ -85,6 +86,7 @@ export function AdminPage() {
   const [annOpen, setAnnOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [positionsOpen, setPositionsOpen] = useState(false)
+  const [flagsOpen, setFlagsOpen] = useState(false)
   const [pwFor, setPwFor] = useState<Role | null>(null)
 
   const today = useMemo(() => {
@@ -163,7 +165,7 @@ export function AdminPage() {
           </section>
 
           <section>
-            <SectionHeader title="الحالات الحرجة" meta={criticalList.length ? `${criticalList.length} مريض` : undefined} />
+            <SectionHeader title="الحالات الحرجة" meta={criticalList.length ? patientsCount(criticalList.length) : undefined} />
             <div className="panel overflow-hidden">
               {criticalList.length === 0 ? (
                 <EmptyState title="لا توجد حالات حرجة حالياً" />
@@ -251,6 +253,7 @@ export function AdminPage() {
             <>
               <ToolRow title="الردهات" sub={`${wards.length} ردهات — إضافة وتعديل الأسماء والأعداد والعلامات الحيوية`} to="/admin/wards" />
               <ToolRow title="أقسام الكادر الطبي" sub={`${settings.departments.length} أقسام`} to="/admin/departments" />
+              <ToolRow title="العلامات السريعة للمرضى" sub={settings.flags.map((f) => f.label).join('، ') || 'لا توجد علامات'} onClick={() => setFlagsOpen(true)} />
               <ToolRow title="مناصب جدول الخفارات" sub={settings.positions.map((p) => p.label).join('، ')} onClick={() => setPositionsOpen(true)} />
               <ToolRow title="وقت بدء الخفارة" sub="الخفارة ٢٤ ساعة" onClick={() => setSettingsOpen(true)} />
               <ToolRow title="دليل الهواتف" sub={`${contacts.length} جهة اتصال`} to="/staff/directory" />
@@ -277,6 +280,7 @@ export function AdminPage() {
       <AnnouncementSheet open={annOpen} onClose={() => setAnnOpen(false)} />
       <ShiftStartSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <PositionsSheet open={positionsOpen} onClose={() => setPositionsOpen(false)} />
+      <FlagsSheet open={flagsOpen} onClose={() => setFlagsOpen(false)} />
       <ChangePasswordSheet account={pwFor} onClose={() => setPwFor(null)} />
     </div>
   )
@@ -454,6 +458,116 @@ function PositionsSheet({ open, onClose }: { open: boolean; onClose: () => void 
             إضافة
           </button>
         </div>
+      </div>
+    </Sheet>
+  )
+}
+
+/** العلامات السريعة التي تظهر على بطاقات المرضى (صائم، عزل، خطر السقوط...) */
+function FlagsSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { settings } = useData()
+  const toast = useToast()
+  const [list, setList] = useState<PatientFlag[]>([])
+  const [newLabel, setNewLabel] = useState('')
+
+  useEffect(() => {
+    if (open) {
+      setList(settings.flags.map((f) => ({ ...f })))
+      setNewLabel('')
+    }
+  }, [open, settings.flags])
+
+  const add = () => {
+    const label = newLabel.trim()
+    if (!label || list.length >= MAX_FLAGS) return
+    setList((l) => [...l, { id: shortId('f'), label, tone: 'neutral' }])
+    setNewLabel('')
+  }
+
+  const nextTone = (t: FlagTone): FlagTone => {
+    const i = FLAG_TONES.findIndex((x) => x.value === t)
+    return FLAG_TONES[(i + 1) % FLAG_TONES.length].value
+  }
+
+  const save = () => {
+    const cleaned = list.map((f) => ({ id: f.id, label: f.label.trim(), tone: f.tone })).filter((f) => f.label)
+    saveSettings({ flags: cleaned }).catch(() => toast('تعذّر الحفظ', 'error'))
+    toast('تم حفظ العلامات السريعة')
+    onClose()
+  }
+
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title="العلامات السريعة للمرضى"
+      subtitle="تظهر أزراراً في بيانات المريض، وشارات ملوّنة على بطاقته وفي تقرير التسليم"
+      footer={
+        <button type="button" className="btn btn-primary" onClick={save}>
+          حفظ
+        </button>
+      }
+    >
+      <div className="space-y-2">
+        {list.length === 0 && <p className="text-[0.86rem] text-muted">لا توجد علامات. أضف علامة من الأسفل.</p>}
+        {list.map((f, i) => {
+          const tone = FLAG_TONES.find((t) => t.value === f.tone)?.label ?? ''
+          return (
+            <div key={f.id} className="flex items-center gap-1">
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm btn-icon shrink-0"
+                onClick={() => setList((l) => l.map((x, k) => (k === i ? { ...x, tone: nextTone(x.tone) } : x)))}
+                aria-label={`اللون: ${tone} — اضغط للتغيير`}
+                title={`اللون: ${tone}`}
+              >
+                <span className={`size-4 rounded-full ${FLAG_DOT[f.tone]}`} />
+              </button>
+              <input
+                className="input flex-1"
+                value={f.label}
+                onChange={(e) => setList((l) => l.map((x, k) => (k === i ? { ...x, label: e.target.value } : x)))}
+                maxLength={30}
+              />
+              <ListRowControls index={i} length={list.length} onMove={(d) => setList((l) => moveItem(l, i, d))} onDelete={() => setList((l) => l.filter((_, k) => k !== i))} />
+            </div>
+          )
+        })}
+        {list.length < MAX_FLAGS && (
+          <div className="flex gap-2 pt-2">
+            <input
+              className="input flex-1"
+              placeholder="علامة جديدة، مثال: سكري"
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  add()
+                }
+              }}
+              maxLength={30}
+            />
+            <button type="button" className="btn btn-secondary" onClick={add}>
+              إضافة
+            </button>
+          </div>
+        )}
+        {list.some((f) => f.label.trim()) && (
+          <div className="pt-3">
+            <div className="field-label">معاينة</div>
+            <div className="flex flex-wrap gap-1">
+              {list
+                .filter((f) => f.label.trim())
+                .map((f) => (
+                  <span key={f.id} className={`chip ${FLAG_CHIP[f.tone]}`}>
+                    {f.label}
+                  </span>
+                ))}
+            </div>
+          </div>
+        )}
+        <p className="pt-2 text-[0.76rem] text-muted">اضغط الدائرة الملونة لتغيير لون العلامة. حذف علامة يزيلها من بطاقات المرضى أيضاً.</p>
       </div>
     </Sheet>
   )

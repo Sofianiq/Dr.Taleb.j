@@ -9,6 +9,9 @@ import { useCensus, useData, wardBeds } from '../data/store'
 import type { BedStatus, Ward } from '../data/types'
 import { STATUS, unitCount } from '../lib/constants'
 import { currentShiftDate, isoDate, longDate, prettyTime } from '../lib/dates'
+import { useNow } from '../lib/hooks'
+import { patientsNoun } from '../lib/text'
+import { isDue, vitalsDue } from '../lib/vitals'
 import { HandoverDoc } from '../print/docs'
 
 const MAP_TONE: Record<BedStatus, string> = {
@@ -32,13 +35,15 @@ function BedMap({ ward }: { ward: Ward }) {
   )
 }
 
-export function WardCard({ ward }: { ward: Ward }) {
+export function WardCard({ ward, now }: { ward: Ward; now: number }) {
   const { byWard } = useCensus()
+  const { beds } = useData()
   const c = byWard[ward.id]
   const pct = c.capacity ? Math.round((c.patients / c.capacity) * 100) : 0
   const flags: { s: BedStatus; n: number }[] = (['critical', 'discharge', 'reserved', 'cleaning'] as BedStatus[])
     .map((s) => ({ s, n: c[s] }))
     .filter((f) => f.n > 0)
+  const due = ward.vitalsEvery && ward.vitals.length ? wardBeds(ward, beds).filter((b) => STATUS[b.status].hasPatient && isDue(vitalsDue(ward, b, now))).length : 0
   return (
     <Link to={`/resident/ward/${ward.id}`} className="panel group flex flex-col p-4 transition-colors hover:border-line-strong">
       <div className="flex items-start justify-between gap-3">
@@ -50,7 +55,9 @@ export function WardCard({ ward }: { ward: Ward }) {
       </div>
       <div className="mt-3 flex items-baseline gap-1.5">
         <span className="text-[1.7rem] font-bold leading-none text-ink tabular-nums">{c.patients}</span>
-        <span className="text-[0.86rem] text-muted">/ {c.capacity} مريض</span>
+        <span className="text-[0.86rem] text-muted">
+          {patientsNoun(c.patients)} من {c.capacity}
+        </span>
         <span className="ms-auto text-[0.8rem] font-semibold text-muted tabular-nums">{pct}%</span>
       </div>
       <div className="mt-3">
@@ -66,6 +73,12 @@ export function WardCard({ ward }: { ward: Ward }) {
             {STATUS[f.s].label}: <b className="font-semibold text-ink tabular-nums">{f.n}</b>
           </span>
         ))}
+        {due > 0 && (
+          <span className="inline-flex items-center gap-1 font-semibold text-warn">
+            <span className="size-1.5 rounded-full bg-warn" />
+            بحاجة لقياس: <b className="tabular-nums">{due}</b>
+          </span>
+        )}
       </div>
     </Link>
   )
@@ -73,6 +86,7 @@ export function WardCard({ ward }: { ward: Ward }) {
 
 export function ResidentPage() {
   const { wards, wardsReady, today, settings, announcements } = useData()
+  const now = useNow()
   const { total } = useCensus()
   const { isAdmin } = useAuth()
   const [editorOpen, setEditorOpen] = useState(false)
@@ -167,7 +181,7 @@ export function ResidentPage() {
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {wards.map((w) => (
-            <WardCard key={w.id} ward={w} />
+            <WardCard key={w.id} ward={w} now={now} />
           ))}
         </div>
       )}
@@ -189,7 +203,7 @@ export function ResidentPage() {
 
 /** تقرير تسليم الشفت: لكل الردهات أو لردهة محددة */
 export function HandoverChoice({ open, onClose, wardId }: { open: boolean; onClose: () => void; wardId?: string }) {
-  const { wards, beds, today } = useData()
+  const { wards, beds, today, settings } = useData()
   const [scope, setScope] = useState<string>(wardId ?? 'all')
   const chosen = scope === 'all' ? wards : wards.filter((w) => w.id === scope)
   return (
@@ -199,7 +213,7 @@ export function HandoverChoice({ open, onClose, wardId }: { open: boolean; onClo
       title="تقرير تسليم الشفت"
       subtitle="قائمة المرضى الحاليين مع آخر علامات حيوية وملاحظات"
       filename={`DrTJPH-Handover-${isoDate()}`}
-      build={() => <HandoverDoc wards={chosen} beds={beds} resident={today.assignments.resident ?? ''} />}
+      build={() => <HandoverDoc wards={chosen} beds={beds} resident={today.assignments.resident ?? ''} flags={settings.flags} />}
     >
       <label className="block">
         <span className="field-label">الردهات</span>

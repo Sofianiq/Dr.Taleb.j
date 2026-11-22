@@ -1,12 +1,15 @@
 import type { ReactNode } from 'react'
 import logoUrl from '../assets/logo.webp'
 import { bedLabel, hasPatient, wardBeds } from '../data/store'
-import type { Bed, Observation, Position, ShiftMonth, Sheet, Ward } from '../data/types'
-import { HOSPITAL_AR, HOSPITAL_EN, MANAGED_BY, STATUS, UNITS, VITALS, unitCount } from '../lib/constants'
+import type { Bed, Observation, PatientFlag, Position, ShiftMonth, Sheet, Ward } from '../data/types'
+import { hasAllergy, HOSPITAL_AR, HOSPITAL_EN, MANAGED_BY, STATUS, UNITS, VITALS, unitCount } from '../lib/constants'
 import { ageLabel, dateTime, daysInMonth, isWeekend, longDate, monthTitle, prettyTime, shortDate, shortDateTime, stayDay, stayLength, weekdayOf } from '../lib/dates'
 import { formatPhone } from '../lib/phone'
 import { twoDigits } from '../lib/ids'
-import { vitalLevel } from '../lib/vitals'
+import { patientsCount } from '../lib/text'
+import { formatVital, vitalLevel } from '../lib/vitals'
+
+const flagLabels = (bed: Bed, flags: PatientFlag[] = []) => flags.filter((f) => bed.flags.includes(f.id)).map((f) => f.label)
 
 /* ------------------------------ إطار الصفحة ------------------------------ */
 
@@ -132,7 +135,7 @@ function PrintCard({ ward, bed }: { ward: Ward; bed: Bed }) {
             {vitals.map((k) => (
               <div className="pp-vital" key={k}>
                 <i>{VITALS[k].label}</i>
-                <u>{p ? bed.vitals[k] ?? '' : ''}</u>
+                <u>{p ? formatVital(k, bed.vitals[k]) : ''}</u>
               </div>
             ))}
           </div>
@@ -140,6 +143,7 @@ function PrintCard({ ward, bed }: { ward: Ward; bed: Bed }) {
       )}
       <p className="pp-notes">
         <b>ملاحظات إضافية:</b>
+        {p && hasAllergy(bed.allergies) && <span className="crit-text">حساسية: {bed.allergies} — </span>}
         {p ? bed.notes : ''}
       </p>
     </div>
@@ -154,7 +158,7 @@ const ROW_H = { ward: 8, bed: 13.2 }
 const PAGE_BODY = 214
 
 /** تقرير تسليم الشفت: جميع المرضى الحاليين مع آخر علامات حيوية وملاحظات */
-export function HandoverDoc({ wards, beds, resident }: { wards: Ward[]; beds: Record<string, Bed>; resident: string }) {
+export function HandoverDoc({ wards, beds, resident, flags }: { wards: Ward[]; beds: Record<string, Bed>; resident: string; flags?: PatientFlag[] }) {
   const rows: HandoverRow[] = []
   let patients = 0
   let critical = 0
@@ -236,11 +240,11 @@ export function HandoverDoc({ wards, beds, resident }: { wards: Ward[]; beds: Re
                 r.kind === 'ward' ? (
                   <tr key={`w-${r.ward.id}`} className="pp-ho-ward">
                     <td colSpan={6}>
-                      {r.ward.name} <small>— {r.count ? `${r.count} مريض` : 'لا يوجد مرضى'}</small>
+                      {r.ward.name} <small>— {patientsCount(r.count)}</small>
                     </td>
                   </tr>
                 ) : (
-                  <HandoverBedRow key={r.bed.id} ward={r.ward} bed={r.bed} />
+                  <HandoverBedRow key={r.bed.id} ward={r.ward} bed={r.bed} flags={flags} />
                 ),
               )}
             </tbody>
@@ -252,15 +256,17 @@ export function HandoverDoc({ wards, beds, resident }: { wards: Ward[]; beds: Re
   )
 }
 
-function HandoverBedRow({ ward, bed }: { ward: Ward; bed: Bed }) {
+function HandoverBedRow({ ward, bed, flags }: { ward: Ward; bed: Bed; flags?: PatientFlag[] }) {
   const day = stayDay(bed.admittedAt?.toDate())
   const vitals = ward.vitals.filter((k) => bed.vitals[k])
+  const marks = flagLabels(bed, flags)
   return (
     <tr className={bed.status === 'critical' ? 'crit' : ''}>
       <td className="pp-ho-bed">{bedLabel(bed)}</td>
       <td>
         <div className="pp-ho-name">{bed.patientName}</div>
         <div className="pp-ho-sub">{[ageLabel(bed.age), bed.sex].filter(Boolean).join(' · ')}</div>
+        {hasAllergy(bed.allergies) && <div className="pp-ho-sub pp-ho-clip crit-text">حساسية: {bed.allergies}</div>}
       </td>
       <td>
         <div className="pp-ho-clip">{bed.doctorName}</div>
@@ -270,13 +276,16 @@ function HandoverBedRow({ ward, bed }: { ward: Ward; bed: Bed }) {
       <td className="pp-ho-vitals">
         {vitals.map((k) => (
           <span key={k} className={vitalLevel(k, bed.vitals[k], ward.population) === 'alert' ? 'crit-text' : ''}>
-            {VITALS[k].label} <b>{bed.vitals[k]}</b>
+            {VITALS[k].label} <b>{formatVital(k, bed.vitals[k])}</b>
           </span>
         ))}
         {bed.vitalsAt && <em>{shortDateTime(bed.vitalsAt.toDate())}</em>}
       </td>
       <td>
-        <div className="pp-ho-status">{STATUS[bed.status].label}</div>
+        <div className="pp-ho-status">
+          {STATUS[bed.status].label}
+          {marks.length > 0 && <span className="pp-ho-flags"> · {marks.join('، ')}</span>}
+        </div>
         <div className="pp-ho-notes">{bed.notes}</div>
       </td>
     </tr>
@@ -289,13 +298,17 @@ const OBS_FIRST = 16
 const OBS_NEXT = 34
 
 /** ملخص حالة مريض مع سجل علاماته الحيوية */
-export function PatientDoc({ ward, bed, observations }: { ward: Ward; bed: Bed; observations: Observation[] }) {
+export function PatientDoc({ ward, bed, observations, flags }: { ward: Ward; bed: Bed; observations: Observation[]; flags?: PatientFlag[] }) {
   const unit = UNITS[ward.unit]
+  const marks = flagLabels(bed, flags)
+  const alerts = hasAllergy(bed.allergies) || marks.length > 0
   const admitted = bed.admittedAt?.toDate()
   const day = stayDay(admitted)
   const rows = [...observations].reverse()
-  const pages: Observation[][] = [rows.slice(0, OBS_FIRST)]
-  for (let i = OBS_FIRST; i < rows.length; i += OBS_NEXT) pages.push(rows.slice(i, i + OBS_NEXT))
+  // شريط الحساسية والعلامات يأخذ مساحة صفّين من جدول القراءات في الصفحة الأولى
+  const first = alerts ? OBS_FIRST - 2 : OBS_FIRST
+  const pages: Observation[][] = [rows.slice(0, first)]
+  for (let i = first; i < rows.length; i += OBS_NEXT) pages.push(rows.slice(i, i + OBS_NEXT))
 
   const info: [string, string][] = [
     ['اسم المريض', bed.patientName],
@@ -323,6 +336,20 @@ export function PatientDoc({ ward, bed, observations }: { ward: Ward; bed: Bed; 
                   </div>
                 ))}
               </div>
+              {alerts && (
+                <div className="pp-alerts">
+                  {hasAllergy(bed.allergies) && (
+                    <span className="crit-text">
+                      <b>حساسية:</b> {bed.allergies}
+                    </span>
+                  )}
+                  {marks.length > 0 && (
+                    <span>
+                      <b>علامات:</b> {marks.join('، ')}
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="pp-box">
                 <b>الملاحظات والحالة العامة</b>
                 <p>{bed.notes || '—'}</p>
@@ -356,7 +383,7 @@ export function PatientDoc({ ward, bed, observations }: { ward: Ward; bed: Bed; 
                     <td className="pp-obs-time">{o.at ? shortDateTime(o.at.toDate()) : ''}</td>
                     {ward.vitals.map((k) => (
                       <td key={k} className={vitalLevel(k, o.values[k], ward.population) === 'alert' ? 'crit-text' : ''}>
-                        {o.values[k] ?? ''}
+                        {formatVital(k, o.values[k])}
                       </td>
                     ))}
                     <td className="pp-obs-by">{o.by}</td>
